@@ -29,7 +29,7 @@
     <artifactId>flyway-database-oracle</artifactId>
     <packaging>jar</packaging>
     <name>${project.artifactId}</name>
-    <version>${project.parent.version}</version>
+    <version>${project.parent.version}.apexsoft</version>
 
     <dependencies>
         <dependency>

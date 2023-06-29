@@ -71,7 +71,7 @@ public class OracleDatabase extends Database<OracleConnection> {
     public final void ensureSupported() {
         ensureDatabaseIsRecentEnough("10");
 
-        ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("18.0", org.flywaydb.core.internal.license.Edition.ENTERPRISE);
+        ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("11.0", org.flywaydb.core.internal.license.Edition.ENTERPRISE);
 
         recommendFlywayUpgradeIfNecessaryForMajorVersion("19.3");
     }
