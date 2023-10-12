@@ -35,15 +35,20 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.flywaydb.core.internal.util.FileUtils.createDirIfNotExists;
+
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class JsonUtils {
-    public static String jsonToFile(String filename, String json) {
-        return jsonToFile(filename, JsonParser.parseString(json).getAsJsonObject());
-    }
 
     public static String jsonToFile(String filename, Object json) {
 
         File file= new File(filename);
+
+        try {
+            createDirIfNotExists(file);
+        } catch (UnsupportedOperationException ignore) {
+
+        }
 
         try (FileWriter fileWriter = new FileWriter(file)) {
             getGson().toJson(json, fileWriter);
@@ -88,6 +93,10 @@ public class JsonUtils {
             throw new FlywayException("Unable to read filename: " + filename, e);
         }
 
+        if (existingObject == null) {
+            return json;
+        }
+
         existingObject.individualResults.addAll(json.individualResults);
         return existingObject;
     }
@@ -96,9 +105,21 @@ public class JsonUtils {
         return JsonParser.parseString(json).getAsJsonArray();
     }
 
+    public static <T> T parseJson(String json, Class<T> clazz) {
+        return getGson().fromJson(json, clazz);
+    }
+
     public static String prettyPrint(String json) {
-        JsonReader reader = new JsonReader(new StringReader(json));
-        reader.setLenient(true);
-        return getGson().newBuilder().setLenient().create().toJson(JsonParser.parseReader(reader).getAsJsonObject());
+        String output;
+        try {
+            JsonReader reader = new JsonReader(new StringReader(json));
+            reader.setLenient(true);
+            output = getGson().newBuilder().setLenient().create().toJson(JsonParser.parseReader(reader).getAsJsonObject());
+        } catch (Exception ignore) {
+            output = json;
+        }
+        output = output.replace("\\r\\n", System.lineSeparator());
+        output = output.replace("\\n", System.lineSeparator());
+        return output;
     }
 }

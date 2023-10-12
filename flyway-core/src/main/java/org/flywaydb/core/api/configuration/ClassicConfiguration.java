@@ -83,6 +83,10 @@ public class ClassicConfiguration implements Configuration {
 
     @Getter
     @Setter
+    private String workingDirectory;
+
+    @Getter
+    @Setter
     private ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 
     @Getter
@@ -103,7 +107,9 @@ public class ClassicConfiguration implements Configuration {
         if (!StringUtils.hasText(envName)) {
             envName = "default";
         }
-
+        if (getModernConfig().getEnvironments().get(envName) == null) {
+            throw new FlywayException("Environment '" + envName + "' not found. Check that this environment exists in your configuration.");
+        }
         return getModernConfig().getEnvironments().get(envName);
     }
 
@@ -112,7 +118,9 @@ public class ClassicConfiguration implements Configuration {
         if (!StringUtils.hasText(envName)) {
             envName = "default";
         }
-
+        if (getResolvedEnvironment(envName) == null) {
+            throw new FlywayException("Environment '" + envName + "' not found. Check that this environment exists in your configuration.");
+        }
         return getResolvedEnvironment(envName);
     }
 
@@ -390,7 +398,7 @@ public class ClassicConfiguration implements Configuration {
     @Override
     public MigrationVersion getBaselineVersion() {
 
-        return MigrationVersion.fromVersion(getModernFlyway().getBaselineVersion()); // todo - should this be in env
+        return MigrationVersion.fromVersion(getModernFlyway().getBaselineVersion() != null ? getModernFlyway().getBaselineVersion() : "1");
     }
 
     @Override
@@ -813,6 +821,14 @@ public class ClassicConfiguration implements Configuration {
 
     public void setReportFilename(String reportFilename) {
         getModernFlyway().setReportFilename(reportFilename);
+    }
+
+    public void setEnvironment(String environment) {
+        if (modernConfig.getEnvironments().containsKey(environment)) {
+            getModernFlyway().setEnvironment(environment);
+        } else {
+            throw new FlywayException("Environment '" + environment + "' not found");
+        }
     }
 
     /**
@@ -1656,8 +1672,10 @@ public class ClassicConfiguration implements Configuration {
         }
 
         if (StringUtils.hasText(getCurrentResolvedEnvironment().getUrl()) && (dataSource == null || StringUtils.hasText(urlProp) || StringUtils.hasText(driverProp) || StringUtils.hasText(userProp) || StringUtils.hasText(passwordProp))) {
+            Map<String, String> jdbcProperties = Optional.ofNullable(getCurrentResolvedEnvironment().getJdbcProperties()).orElse(new HashMap<>());
             Map<String, String> jdbcPropertiesFromProps = getPropertiesUnderNamespace(props, getPlaceholders(), ConfigUtils.JDBC_PROPERTIES_PREFIX);
-            setDataSource(new DriverDataSource(classLoader, getCurrentResolvedEnvironment().getDriver(), getCurrentResolvedEnvironment().getUrl(), getCurrentResolvedEnvironment().getUser(), getCurrentResolvedEnvironment().getPassword(), this, jdbcPropertiesFromProps));
+            jdbcProperties.putAll(jdbcPropertiesFromProps);
+            setDataSource(new DriverDataSource(classLoader, getCurrentResolvedEnvironment().getDriver(), getCurrentResolvedEnvironment().getUrl(), getCurrentResolvedEnvironment().getUser(), getCurrentResolvedEnvironment().getPassword(), this, jdbcProperties));
         }
 
         ConfigUtils.checkConfigurationForUnrecognisedProperties(props, "flyway.");
@@ -1828,10 +1846,20 @@ public class ClassicConfiguration implements Configuration {
         for (Map.Entry<String, Map<String, Object>> property : configExtensionsPropertyMap.entrySet()) {
             ConfigurationExtension cfg = pluginRegister.getPlugins(ConfigurationExtension.class).stream().filter(c -> c.getClass().toString().equals(property.getKey())).findFirst().orElse(null);
             if (cfg != null) {
-                Map<String, Object> mp = property.getValue();
+                Map<String, Object> mpTmp = property.getValue();
 
                 try {
                     ObjectMapper objectMapper = new ObjectMapper();
+                    Map<String, Object> mp = new HashMap<>();
+                    for(Map.Entry<String, Object> entry : mpTmp.entrySet()) {
+                        Field[] subFields = cfg.getClass().getDeclaredFields();
+                        Field field = Arrays.stream(subFields).filter(f -> f.getName().equals(entry.getKey())).findFirst().orElse(null);
+                        Object value = (field.getType() == List.class || field.getType() == String[].class) ?
+                                ((String) entry.getValue()).split(",") :
+                                entry.getValue();
+
+                        mp.put(entry.getKey(), value);
+                    }
                     ConfigurationExtension newConfigurationExtension = objectMapper.convertValue(mp, cfg.getClass());
                     MergeUtils.mergeModel(newConfigurationExtension, cfg);
                 } catch (Exception e) {

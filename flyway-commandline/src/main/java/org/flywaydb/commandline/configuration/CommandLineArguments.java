@@ -154,6 +154,7 @@ public class CommandLineArguments {
         return Arrays.stream(args)
                      .filter(CommandLineArguments::isConfigurationArg)
                      .filter(arg -> !arg.startsWith("-" + CONFIG_FILES + "="))
+                     .filter(arg -> !arg.startsWith("-" + CONFIG_FILE_ENCODING + "="))
                      .filter(f -> !isConfigurationOptionCommandlineOnly(getConfigurationOptionNameFromArg(f)))
                      .collect(Collectors.toMap(p -> (Arrays.stream((EnvironmentModel.class).getDeclaredFields()).anyMatch(x -> x.getName().equals(getConfigurationOptionNameFromArg(p)))
                                                        ? "environments." + ClassicConfiguration.TEMP_ENVIRONMENT_NAME + "."
@@ -182,7 +183,7 @@ public class CommandLineArguments {
 
     public void validate() {
 
-        IntStream.range(0, args.length - 1)
+        IntStream.range(0, args.length)
                  .filter(i -> !isConfigurationArg(args[i]))
                  .filter(i -> !VALID_OPERATIONS_AND_FLAGS.contains(args[i]))
                  .filter(i -> !isHandledByExtension(args[i]))

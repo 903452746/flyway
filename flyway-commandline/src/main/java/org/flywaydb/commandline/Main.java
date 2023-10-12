@@ -26,7 +26,9 @@ import org.flywaydb.commandline.utils.TelemetryUtils;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.FlywayTelemetryManager;
 import org.flywaydb.core.api.*;
+import org.flywaydb.core.api.configuration.ClassicConfiguration;
 import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.flywaydb.core.api.logging.Log;
 import org.flywaydb.core.api.output.CompositeResult;
 import org.flywaydb.core.api.output.ErrorOutput;
@@ -148,15 +150,16 @@ public class Main {
 
     private static OperationResult executeFlyway(FlywayTelemetryManager flywayTelemetryManager, CommandLineArguments commandLineArguments, Configuration configuration) {
         Flyway flyway = Flyway.configure(configuration.getClassLoader()).configuration(configuration).load();
+        Configuration executionConfiguration = flyway.getConfiguration();
         OperationResult result;
         if (commandLineArguments.getOperations().size() == 1) {
             String operation = commandLineArguments.getOperations().get(0);
-            result = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, configuration);
+            result = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, executionConfiguration);
         } else {
             CompositeResult<OperationResult> compositeResult = new CompositeResult<>();
 
             for (String operation : commandLineArguments.getOperations()) {
-                OperationResult operationResult = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, configuration);
+                OperationResult operationResult = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, executionConfiguration);
                 compositeResult.individualResults.add(operationResult);
                 if (operationResult instanceof HtmlResult && ((HtmlResult) operationResult).exceptionObject instanceof DbMigrate.FlywayMigrateException) {
                     break;
@@ -164,6 +167,16 @@ public class Main {
             }
             result = compositeResult;
         }
+        if (configuration instanceof ClassicConfiguration) {
+            ClassicConfiguration classicConfiguration = (ClassicConfiguration) configuration;
+            classicConfiguration.configure(executionConfiguration);
+        }
+
+        if (configuration instanceof FluentConfiguration) {
+            FluentConfiguration fluentConfiguration = (FluentConfiguration) configuration;
+            fluentConfiguration.configuration(executionConfiguration);
+        }
+
         return result;
     }
 
@@ -253,9 +266,8 @@ public class Main {
 
 
                     if (commandLineArguments.isFilterOnMigrationIds()) {
-                        System.out.print(Arrays.stream(infos)
-                                               .map(m -> m.getVersion() == null ? m.getDescription() : m.getVersion().getVersion())
-                                               .collect(Collectors.joining(",")));
+                        //Must use System.out here rather than LOG.info because LogCreator is empty.
+                        System.out.print(MigrationInfoDumper.dumpToMigrationIds(infos));
                     } else {
                         LOG.info(MigrationInfoDumper.dumpToAsciiTable(infos));
                     }
@@ -328,7 +340,8 @@ public class Main {
         String indent = "    ";
 
         LOG.info("Usage");
-        LOG.info(indent + "flyway [options] command");
+        LOG.info(indent + "flyway [options] [command]");
+        LOG.info(indent + "flyway help [command]");
         LOG.info("");
 
         if (fullVersion) {
@@ -340,6 +353,7 @@ public class Main {
         LOG.info("Commands");
         List<Pair<String, String>> usages = pluginRegister.getPlugins(CommandExtension.class).stream().flatMap(e -> e.getUsage().stream()).collect(Collectors.toList());
         int padSize = usages.stream().max(Comparator.comparingInt(u -> u.getLeft().length())).map(u -> u.getLeft().length() + 3).orElse(11);
+        LOG.info(indent + StringUtils.rightPad("help", padSize, ' ') + "Print this usage info and exit");
         LOG.info(indent + StringUtils.rightPad("migrate", padSize, ' ') + "Migrates the database");
         LOG.info(indent + StringUtils.rightPad("clean", padSize, ' ') + "Drops all objects in the configured schemas");
         LOG.info(indent + StringUtils.rightPad("info", padSize, ' ') + "Prints the information about applied, current and pending migrations");
@@ -426,6 +440,7 @@ public class Main {
         LOG.info("");
         LOG.info("Flyway Usage Example");
         LOG.info(indent + "flyway -user=myuser -password=s3cr3t -url=jdbc:h2:mem -placeholders.abc=def migrate");
+        LOG.info(indent + "flyway help check");
         LOG.info("");
         LOG.info("More info at " + FlywayDbWebsiteLinks.USAGE_COMMANDLINE);
         LOG.info("Learn more about Flyway Teams edition at " + FlywayDbWebsiteLinks.TRY_TEAMS_EDITION);
