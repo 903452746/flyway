@@ -22,6 +22,8 @@ import org.flywaydb.core.internal.jdbc.StatementInterceptor;
 import org.flywaydb.core.internal.util.ClassUtils;
 import org.flywaydb.database.mysql.MySQLDatabaseType;
 
+import java.sql.Connection;
+
 public class OceanBaseDatabaseType extends MySQLDatabaseType {
 
     public static final String JDBC_URL_PREFIX = "jdbc:oceanbase:";
@@ -60,5 +62,13 @@ public class OceanBaseDatabaseType extends MySQLDatabaseType {
     @Override
     public Database createDatabase(Configuration configuration, JdbcConnectionFactory jdbcConnectionFactory, StatementInterceptor statementInterceptor) {
         return new OceanBaseDatabase(configuration, jdbcConnectionFactory, statementInterceptor);
+    }
+
+    @Override
+    public boolean handlesDatabaseProductNameAndVersion(String databaseProductName, String databaseProductVersion, Connection connection) {
+        // Google Cloud SQL returns different names depending on the environment and the SDK version.
+        //   ex.: Google SQL Service/MySQL
+        return super.handlesDatabaseProductNameAndVersion(databaseProductName, databaseProductVersion, connection)
+                || databaseProductName.contains(getName());
     }
 }
