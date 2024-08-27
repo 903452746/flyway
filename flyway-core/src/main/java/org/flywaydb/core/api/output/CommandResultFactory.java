@@ -1,23 +1,26 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.api.output;
 
 import org.flywaydb.core.api.*;
 import org.flywaydb.core.api.configuration.Configuration;
-import org.flywaydb.core.api.resolver.ResolvedMigration;
 import org.flywaydb.core.extensibility.AppliedMigration;
 import org.flywaydb.core.internal.database.base.Database;
 import org.flywaydb.core.internal.license.VersionPrinter;
@@ -27,44 +30,52 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class CommandResultFactory {
-    public static InfoResult createInfoResult(Configuration configuration, Database database, MigrationInfo[] migrationInfos, MigrationInfo current, boolean allSchemasEmpty) {
-        String flywayVersion = VersionPrinter.getVersion();
-        String databaseName = getDatabaseName(configuration, database);
-        Set<MigrationInfo> undoableMigrations = getUndoMigrations(migrationInfos);
+    public static InfoResult createInfoResult(final Configuration configuration,
+        final Database database,
+        final MigrationInfo[] migrationInfos,
+        final MigrationInfo current,
+        final boolean allSchemasEmpty) {
+        final String databaseName = getDatabaseName(configuration, database);
+        return createInfoResult(configuration, databaseName, migrationInfos, current, allSchemasEmpty);
+    }
+
+    public static InfoResult createInfoResult(final Configuration configuration,
+        final String databaseName,
+        MigrationInfo[] migrationInfos,
+        final MigrationInfo current,
+        final boolean allSchemasEmpty) {
+        final String flywayVersion = VersionPrinter.getVersion();
+        final Set<MigrationInfo> undoableMigrations = getUndoMigrations(migrationInfos);
 
         migrationInfos = removeAvailableUndoMigrations(migrationInfos);
 
-        List<InfoOutput> infoOutputs = new ArrayList<>();
-        for (MigrationInfo migrationInfo : migrationInfos) {
+        final List<InfoOutput> infoOutputs = new ArrayList<>();
+        for (final MigrationInfo migrationInfo : migrationInfos) {
             infoOutputs.add(createInfoOutput(undoableMigrations, migrationInfo));
         }
 
-        MigrationVersion currentSchemaVersion = current == null ? MigrationVersion.EMPTY : current.getVersion();
-        MigrationVersion schemaVersionToOutput = currentSchemaVersion == null ? MigrationVersion.EMPTY : currentSchemaVersion;
-        String schemaVersion = schemaVersionToOutput.getVersion();
+        final MigrationVersion currentSchemaVersion = current == null ? MigrationVersion.EMPTY : current.getVersion();
+        final MigrationVersion schemaVersionToOutput = currentSchemaVersion == null
+            ? MigrationVersion.EMPTY
+            : currentSchemaVersion;
+        final String schemaVersion = schemaVersionToOutput.getVersion();
 
-        return new InfoResult(
-                flywayVersion,
-                databaseName,
-                schemaVersion,
-                String.join(", ", configuration.getSchemas()),
-                infoOutputs,
-                allSchemasEmpty);
+        return new InfoResult(flywayVersion,
+            databaseName,
+            schemaVersion,
+            String.join(", ", configuration.getSchemas()),
+            infoOutputs,
+            allSchemasEmpty);
     }
 
-    public static MigrateResult createMigrateResult(String databaseName, Configuration configuration) {
+    public static MigrateResult createMigrateResult(String databaseName, String databaseType, Configuration configuration) {
         String flywayVersion = VersionPrinter.getVersion();
-        return new MigrateResult(flywayVersion, databaseName, String.join(", ", configuration.getSchemas()));
+        return new MigrateResult(flywayVersion, databaseName, String.join(", ", configuration.getSchemas()), databaseType);
     }
 
     public static CleanResult createCleanResult(String databaseName) {
         String flywayVersion = VersionPrinter.getVersion();
         return new CleanResult(flywayVersion, databaseName);
-    }
-
-    public static UndoResult createUndoResult(String databaseName, Configuration configuration) {
-        String flywayVersion = VersionPrinter.getVersion();
-        return new UndoResult(flywayVersion, databaseName, String.join(", ", configuration.getSchemas()));
     }
 
     public static BaselineResult createBaselineResult(String databaseName) {
@@ -97,24 +108,22 @@ public class CommandResultFactory {
                               migrationInfo.getPhysicalLocation() != null ? migrationInfo.getPhysicalLocation() : "",
                               getUndoablePath(migrationInfo, undoableMigrations),
                               migrationInfo.getInstalledBy() != null ? migrationInfo.getInstalledBy() : "",
+                              migrationInfo.getShouldExecuteExpression(),
                               migrationInfo.getExecutionTime() != null ? migrationInfo.getExecutionTime() : 0);
     }
 
     public static MigrateOutput createMigrateOutput(MigrationInfo migrationInfo, int executionTime) {
+        return createMigrateOutput(migrationInfo, executionTime, false);
+    }
+
+    public static MigrateOutput createMigrateOutput(MigrationInfo migrationInfo, int executionTime, Boolean rolledBack) {
         return new MigrateOutput(getCategory(migrationInfo),
                                  migrationInfo.getVersion() != null ? migrationInfo.getVersion().getVersion() : "",
                                  migrationInfo.getDescription(),
                                  migrationInfo.getType() != null ? migrationInfo.getType().toString() : "",
                                  migrationInfo.getPhysicalLocation() != null ? migrationInfo.getPhysicalLocation() : "",
-                                 executionTime);
-    }
-
-    public static UndoOutput createUndoOutput(ResolvedMigration migrationInfo, int executionTime) {
-        return new UndoOutput(
-                migrationInfo.getVersion().getVersion(),
-                migrationInfo.getDescription(),
-                migrationInfo.getPhysicalLocation() != null ? migrationInfo.getPhysicalLocation() : "",
-                executionTime);
+                                 executionTime,
+                                 rolledBack);
     }
 
     public static ValidateOutput createValidateOutput(MigrationInfo migrationInfo, ErrorDetails validateError) {

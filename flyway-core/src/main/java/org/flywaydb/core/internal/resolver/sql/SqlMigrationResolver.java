@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.resolver.sql;
 
@@ -24,6 +28,8 @@ import org.flywaydb.core.api.resolver.MigrationResolver;
 import org.flywaydb.core.api.resolver.ResolvedMigration;
 import org.flywaydb.core.api.resource.LoadableResource;
 import org.flywaydb.core.api.resource.Resource;
+import org.flywaydb.core.extensibility.LicenseGuard;
+import org.flywaydb.core.extensibility.Tier;
 import org.flywaydb.core.internal.parser.ParsingContext;
 import org.flywaydb.core.internal.parser.PlaceholderReplacingReader;
 import org.flywaydb.core.internal.resolver.ChecksumCalculator;
@@ -104,8 +110,8 @@ public class SqlMigrationResolver implements MigrationResolver {
         return list.toArray(new LoadableResource[0]);
     }
 
-    private Integer getChecksumForLoadableResource(boolean repeatable, List<LoadableResource> loadableResources, ResourceName resourceName) {
-        if (repeatable && configuration.isPlaceholderReplacement()) {
+    private Integer getChecksumForLoadableResource(boolean repeatable, List<LoadableResource> loadableResources, ResourceName resourceName, boolean placeholderReplacement) {
+        if (repeatable && placeholderReplacement) {
             parsingContext.updateFilenamePlaceholder(resourceName, configuration);
             return ChecksumCalculator.calculate(createPlaceholderReplacingLoadableResources(loadableResources));
         }
@@ -147,7 +153,9 @@ public class SqlMigrationResolver implements MigrationResolver {
 
 
 
-            Integer checksum = getChecksumForLoadableResource(repeatable, resources, resourceName);
+
+
+            Integer checksum = getChecksumForLoadableResource(repeatable, resources, resourceName, sqlScript.placeholderReplacement());
             Integer equivalentChecksum = getEquivalentChecksumForLoadableResource(repeatable, resources);
 
             migrations.add(new ResolvedMigrationImpl(
@@ -159,13 +167,7 @@ public class SqlMigrationResolver implements MigrationResolver {
                     CoreMigrationType.SQL,
                     resource.getAbsolutePathOnDisk(),
                     new SqlMigrationExecutor(sqlScriptExecutorFactory, sqlScript, false,
-
-
-
-
-                                              false
-
-                    )));
+                                             configuration.isBatch())));
         }
     }
 

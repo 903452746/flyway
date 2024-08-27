@@ -1,23 +1,40 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-commandline
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.commandline;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
+import static org.flywaydb.commandline.logging.LoggingUtils.getLogCreator;
+import static org.flywaydb.commandline.logging.LoggingUtils.initLogging;
+import static org.flywaydb.commandline.utils.TelemetryUtils.populateRootTelemetry;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import lombok.SneakyThrows;
 import org.flywaydb.commandline.configuration.CommandLineArguments;
 import org.flywaydb.commandline.configuration.ConfigurationManagerImpl;
@@ -25,7 +42,11 @@ import org.flywaydb.commandline.logging.console.ConsoleLog.Level;
 import org.flywaydb.commandline.utils.TelemetryUtils;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.FlywayTelemetryManager;
-import org.flywaydb.core.api.*;
+import org.flywaydb.core.api.FlywayException;
+import org.flywaydb.core.api.MigrationFilter;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationInfoService;
+import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.configuration.ClassicConfiguration;
 import org.flywaydb.core.api.configuration.Configuration;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
@@ -34,103 +55,93 @@ import org.flywaydb.core.api.output.CompositeResult;
 import org.flywaydb.core.api.output.ErrorOutput;
 import org.flywaydb.core.api.output.HtmlResult;
 import org.flywaydb.core.api.output.InfoResult;
-import org.flywaydb.core.api.output.MigrateErrorResult;
+import org.flywaydb.core.api.output.MigrateResult;
 import org.flywaydb.core.api.output.OperationResult;
-
 import org.flywaydb.core.extensibility.CommandExtension;
 import org.flywaydb.core.extensibility.EventTelemetryModel;
 import org.flywaydb.core.extensibility.InfoTelemetryModel;
+import org.flywaydb.core.extensibility.LicenseGuard;
 import org.flywaydb.core.internal.command.DbMigrate;
+import org.flywaydb.core.internal.info.MigrationFilterImpl;
 import org.flywaydb.core.internal.info.MigrationInfoDumper;
-
+import org.flywaydb.core.internal.license.FlywayExpiredLicenseKeyException;
+import org.flywaydb.core.internal.license.FlywayLicensingException;
 import org.flywaydb.core.internal.logging.EvolvingLog;
 import org.flywaydb.core.internal.logging.buffered.BufferedLog;
 import org.flywaydb.core.internal.plugin.PluginRegister;
+import org.flywaydb.core.internal.publishing.OperationResultPublisher;
+import org.flywaydb.core.internal.publishing.PublishingConfigurationExtension;
+import org.flywaydb.core.internal.reports.ResultReportGenerator;
 import org.flywaydb.core.internal.reports.ReportDetails;
-import org.flywaydb.core.internal.reports.json.CompositeResultDeserializer;
 import org.flywaydb.core.internal.util.CommandExtensionUtils;
 import org.flywaydb.core.internal.util.FlywayDbWebsiteLinks;
 import org.flywaydb.core.internal.util.JsonUtils;
-import org.flywaydb.core.internal.util.LocalDateTimeSerializer;
 import org.flywaydb.core.internal.util.Pair;
 import org.flywaydb.core.internal.util.StringUtils;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
-
-import static org.flywaydb.commandline.logging.LoggingUtils.getLogCreator;
-import static org.flywaydb.commandline.logging.LoggingUtils.initLogging;
-import static org.flywaydb.commandline.utils.OperationsReportUtils.filterHtmlResults;
-import static org.flywaydb.commandline.utils.OperationsReportUtils.getAggregateExceptions;
-import static org.flywaydb.commandline.utils.OperationsReportUtils.writeReport;
-import static org.flywaydb.commandline.utils.TelemetryUtils.isRedgateEmployee;
-import static org.flywaydb.commandline.utils.TelemetryUtils.populateRootTelemetry;
-
 public class Main {
     private static Log LOG;
-    private static final PluginRegister pluginRegister = new PluginRegister();
+    private static final PluginRegister PLUGIN_REGISTER = new PluginRegister();
+    private static boolean hasPrintedLicense;
 
     public static void main(String[] args) throws Exception {
         int exitCode = 0;
 
-        FlywayTelemetryManager flywayTelemetryManager = null;
-        if (!StringUtils.hasText(System.getenv("REDGATE_DISABLE_TELEMETRY"))) {
-            flywayTelemetryManager = new FlywayTelemetryManager(pluginRegister);
-            flywayTelemetryManager.setRootTelemetryModel(populateRootTelemetry(flywayTelemetryManager.getRootTelemetryModel(), null, false));
-        }
+        final FlywayTelemetryManager flywayTelemetryManager = getFlywayTelemetryManager();
 
         try {
             JavaVersionPrinter.printJavaVersion();
-            CommandLineArguments commandLineArguments = new CommandLineArguments(pluginRegister, args);
+            final CommandLineArguments commandLineArguments = new CommandLineArguments(PLUGIN_REGISTER, args);
             LOG = initLogging(Main.class, commandLineArguments);
 
             try {
                 ReportDetails reportDetails = new ReportDetails();
 
-                commandLineArguments.validate();
+                final Configuration configuration;
+                try (final var ignored = new EventTelemetryModel("parse-args", flywayTelemetryManager)) {
+                    commandLineArguments.validate();
 
-                if (printHelp(commandLineArguments)) {
-                    return;
+                    if (printHelp(commandLineArguments)) {
+                        return;
+                    }
+
+                    configuration = new ConfigurationManagerImpl().getConfiguration(commandLineArguments);
                 }
 
-                Configuration configuration = new ConfigurationManagerImpl().getConfiguration(commandLineArguments);
-
                 if (flywayTelemetryManager != null) {
-                    flywayTelemetryManager.setRootTelemetryModel(populateRootTelemetry(flywayTelemetryManager.getRootTelemetryModel(), configuration, isRedgateEmployee(pluginRegister, configuration)));
+                    flywayTelemetryManager.setRootTelemetryModel(populateRootTelemetry(flywayTelemetryManager.getRootTelemetryModel(),
+                        configuration,
+                        LicenseGuard.getPermit(configuration)));
                 }
 
                 if (!commandLineArguments.skipCheckForUpdate()) {
-                    MavenVersionChecker.checkForVersionUpdates();
-                }
-
-                if (commandLineArguments.isCommunityFallback()) {
-                    LOG.warn("A Flyway License was not provided; fell back to Community Edition. Please contact sales at sales@flywaydb.org for license information.");
+                    try (final var ignored = new EventTelemetryModel("check-for-update", flywayTelemetryManager)) {
+                        MavenVersionChecker.checkForVersionUpdates();
+                    }
                 }
 
                 LocalDateTime executionTime = LocalDateTime.now();
                 OperationResult result = executeFlyway(flywayTelemetryManager, commandLineArguments, configuration);
 
-                OperationResult filteredResults = filterHtmlResults(result);
-                if (filteredResults != null) {
-                    reportDetails = writeReport(configuration, filteredResults, executionTime);
+                final List<ResultReportGenerator> reportGenerators = PLUGIN_REGISTER.getPlugins(ResultReportGenerator.class);
+                for (final ResultReportGenerator resultReportGenerator : reportGenerators) {
+                    reportDetails = resultReportGenerator.generateReport(result, configuration, executionTime);
+                }
 
-                    Exception aggregate = getAggregateExceptions(filteredResults);
-                    if (aggregate != null) {
-                        throw aggregate;
-                    }
+                if (configuration.getPluginRegister().getPlugin(PublishingConfigurationExtension.class).isPublishResult()) {
+                    publishOperationResult(configuration, result);
+                    publishReport(configuration, reportDetails);
                 }
 
                 if (commandLineArguments.shouldOutputJson()) {
                     printJson(commandLineArguments, result, reportDetails);
                 }
-            } catch (Exception e) {
-                OperationResult errorOutput = ErrorOutput.toOperationResult(e);
+            } catch (final FlywayLicensingException e) {
+                final OperationResult errorOutput = ErrorOutput.toOperationResult(e);
+                printError(commandLineArguments, e, errorOutput);
+                exitCode = 35;
+            } catch (final Exception e) {
+                final OperationResult errorOutput = ErrorOutput.toOperationResult(e);
                 printError(commandLineArguments, e, errorOutput);
                 exitCode = 1;
             } finally {
@@ -147,40 +158,79 @@ public class Main {
         }
     }
 
+    private static FlywayTelemetryManager getFlywayTelemetryManager() {
+        if (StringUtils.hasText(System.getenv("REDGATE_DISABLE_TELEMETRY"))) {
+            return null;
+        }
 
-    private static OperationResult executeFlyway(FlywayTelemetryManager flywayTelemetryManager, CommandLineArguments commandLineArguments, Configuration configuration) {
-        Flyway flyway = Flyway.configure(configuration.getClassLoader()).configuration(configuration).load();
-        Configuration executionConfiguration = flyway.getConfiguration();
-        OperationResult result;
+        final var telemetryStartSpan = new EventTelemetryModel("telemetry-startup", null);
+        final var flywayTelemetryManager = new FlywayTelemetryManager(PLUGIN_REGISTER);
+        flywayTelemetryManager.setRootTelemetryModel(populateRootTelemetry(flywayTelemetryManager.getRootTelemetryModel(),
+            null,
+            null));
+        flywayTelemetryManager.logEvent(telemetryStartSpan);
+        return flywayTelemetryManager;
+    }
+
+    private static void printLicenseInfo(final Configuration configuration, final String operation) {
+        if (!hasPrintedLicense && !"auth".equals(operation)) {
+            try {
+                LicenseGuard.getPermit(configuration).print();
+                LOG.info("See release notes here: " + FlywayDbWebsiteLinks.RELEASE_NOTES);
+            } catch (final FlywayExpiredLicenseKeyException e) {
+                LOG.error(e.getMessage());
+            }
+            hasPrintedLicense = true;
+        }
+    }
+
+    private static OperationResult executeFlyway(final FlywayTelemetryManager flywayTelemetryManager,
+        final CommandLineArguments commandLineArguments,
+        final Configuration configuration) {
+        final Flyway flyway = Flyway.configure(configuration.getClassLoader()).configuration(configuration).load();
+        final Configuration executionConfiguration = flyway.getConfiguration();
+        final OperationResult result;
+
         if (commandLineArguments.getOperations().size() == 1) {
-            String operation = commandLineArguments.getOperations().get(0);
-            result = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, executionConfiguration);
+            final String operation = commandLineArguments.getOperations().get(0);
+            printLicenseInfo(configuration, operation);
+            result = executeOperation(flyway,
+                operation,
+                commandLineArguments,
+                flywayTelemetryManager,
+                executionConfiguration);
         } else {
-            CompositeResult<OperationResult> compositeResult = new CompositeResult<>();
-
-            for (String operation : commandLineArguments.getOperations()) {
-                OperationResult operationResult = executeOperation(flyway, operation, commandLineArguments, flywayTelemetryManager, executionConfiguration);
+            final CompositeResult<OperationResult> compositeResult = new CompositeResult<>();
+            for (final String operation : commandLineArguments.getOperations()) {
+                printLicenseInfo(configuration, operation);
+                final OperationResult operationResult = executeOperation(flyway,
+                    operation,
+                    commandLineArguments,
+                    flywayTelemetryManager,
+                    executionConfiguration);
                 compositeResult.individualResults.add(operationResult);
-                if (operationResult instanceof HtmlResult && ((HtmlResult) operationResult).exceptionObject instanceof DbMigrate.FlywayMigrateException) {
+                if (operationResult instanceof HtmlResult
+                    && ((HtmlResult) operationResult).exceptionObject instanceof DbMigrate.FlywayMigrateException) {
                     break;
                 }
             }
             result = compositeResult;
         }
-        if (configuration instanceof ClassicConfiguration) {
-            ClassicConfiguration classicConfiguration = (ClassicConfiguration) configuration;
+
+        if (configuration instanceof final ClassicConfiguration classicConfiguration) {
             classicConfiguration.configure(executionConfiguration);
         }
 
-        if (configuration instanceof FluentConfiguration) {
-            FluentConfiguration fluentConfiguration = (FluentConfiguration) configuration;
+        if (configuration instanceof final FluentConfiguration fluentConfiguration) {
             fluentConfiguration.configuration(executionConfiguration);
         }
 
         return result;
     }
 
-    private static void printError(CommandLineArguments commandLineArguments, Exception e, OperationResult errorResult) {
+    private static void printError(final CommandLineArguments commandLineArguments,
+        final Exception e,
+        final OperationResult errorResult) throws JsonProcessingException {
         if (commandLineArguments.shouldOutputJson()) {
             printJson(commandLineArguments, errorResult, null);
         } else {
@@ -193,15 +243,15 @@ public class Main {
         flushLog(commandLineArguments);
     }
 
-    private static void flushLog(CommandLineArguments commandLineArguments) {
-        Log currentLog = ((EvolvingLog) LOG).getLog();
+    private static void flushLog(final CommandLineArguments commandLineArguments) {
+        final Log currentLog = ((EvolvingLog) LOG).getLog();
         if (currentLog instanceof BufferedLog) {
             ((BufferedLog) currentLog).flush(getLogCreator(commandLineArguments).createLogger(Main.class));
         }
     }
 
-    static String getMessagesFromException(Throwable e) {
-        StringBuilder condensedMessages = new StringBuilder();
+    private static String getMessagesFromException(Throwable e) {
+        final StringBuilder condensedMessages = new StringBuilder();
         String preamble = "";
         while (e != null) {
             if (e instanceof FlywayException) {
@@ -216,7 +266,11 @@ public class Main {
     }
 
     @SneakyThrows
-    private static OperationResult executeOperation(Flyway flyway, String operation, CommandLineArguments commandLineArguments, FlywayTelemetryManager telemetryManager, Configuration configuration) {
+    private static OperationResult executeOperation(final Flyway flyway,
+        final String operation,
+        final CommandLineArguments commandLineArguments,
+        final FlywayTelemetryManager telemetryManager,
+        final Configuration configuration) {
         OperationResult result = null;
         flyway.setFlywayTelemetryManager(telemetryManager);
         if ("clean".equals(operation)) {
@@ -226,44 +280,48 @@ public class Main {
         } else if ("migrate".equals(operation)) {
             try {
                 result = flyway.migrate();
-            } catch (DbMigrate.FlywayMigrateException e) {
+
+
+
+
+
+
+            } catch (final DbMigrate.FlywayMigrateException e) {
                 result = ErrorOutput.fromMigrateException(e);
-                HtmlResult hr = (HtmlResult) result;
+                final HtmlResult hr = (HtmlResult) result;
                 hr.setException(e);
             }
         } else if ("validate".equals(operation)) {
-            try (EventTelemetryModel telemetryModel = new EventTelemetryModel("validate", telemetryManager)) {
+            try (final EventTelemetryModel telemetryModel = new EventTelemetryModel("validate", telemetryManager)) {
                 try {
                     if (commandLineArguments.shouldOutputJson()) {
                         result = flyway.validateWithResult();
                     } else {
                         flyway.validate();
                     }
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     telemetryModel.setException(e);
                     throw e;
                 }
             }
         } else if ("info".equals(operation)) {
-            try (InfoTelemetryModel infoTelemetryModel = new InfoTelemetryModel(telemetryManager)) {
+            try (final InfoTelemetryModel infoTelemetryModel = new InfoTelemetryModel(telemetryManager)) {
                 try {
-                    MigrationInfoService info = flyway.info();
-                    MigrationInfo current = info.current();
-                    MigrationVersion currentSchemaVersion = current == null ? MigrationVersion.EMPTY : current.getVersion();
+                    final MigrationInfoService info = flyway.info();
+                    final MigrationInfo current = info.current();
+                    final MigrationVersion currentSchemaVersion = current == null
+                        ? MigrationVersion.EMPTY
+                        : current.getVersion();
 
-                    MigrationVersion schemaVersionToOutput = currentSchemaVersion == null ? MigrationVersion.EMPTY : currentSchemaVersion;
+                    final MigrationVersion schemaVersionToOutput = currentSchemaVersion == null
+                        ? MigrationVersion.EMPTY
+                        : currentSchemaVersion;
                     LOG.info("Schema version: " + schemaVersionToOutput);
                     LOG.info("");
 
-
-
-
-
-
-
-                     result = info.getInfoResult();
-                     MigrationInfo[] infos = info.all();
-
+                    final MigrationFilter filter = getInfoFilter(commandLineArguments);
+                    result = info.getInfoResult(filter);
+                    final MigrationInfo[] infos = info.all(filter);
 
                     if (commandLineArguments.isFilterOnMigrationIds()) {
                         //Must use System.out here rather than LOG.info because LogCreator is empty.
@@ -272,9 +330,11 @@ public class Main {
                         LOG.info(MigrationInfoDumper.dumpToAsciiTable(infos));
                     }
                     infoTelemetryModel.setNumberOfMigrations(((InfoResult) result).migrations.size());
-                    infoTelemetryModel.setNumberOfPendingMigrations((int) ((InfoResult) result).migrations.stream().filter(m -> "Pending".equals(m.state)).count());
+                    infoTelemetryModel.setNumberOfPendingMigrations((int) ((InfoResult) result).migrations.stream()
+                        .filter(m -> "Pending".equals(m.state))
+                        .count());
                     infoTelemetryModel.setOldestMigrationInstalledOnUTC(TelemetryUtils.getOldestMigration(((InfoResult) result).migrations));
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     infoTelemetryModel.setException(e);
                     throw e;
                 }
@@ -282,33 +342,56 @@ public class Main {
         } else if ("repair".equals(operation)) {
             result = flyway.repair();
         } else {
-            result = CommandExtensionUtils.runCommandExtension(configuration, operation, commandLineArguments.getFlags(), telemetryManager);
+            result = CommandExtensionUtils.runCommandExtension(configuration,
+                operation,
+                commandLineArguments.getFlags(),
+                telemetryManager);
         }
 
         return result;
     }
 
+    private static void publishOperationResult(final Configuration configuration, final OperationResult result) {
+        final List<OperationResultPublisher> publishers = configuration.getPluginRegister().getPlugins(
+            OperationResultPublisher.class);
+        for (final OperationResultPublisher publisher : publishers) {
+            publisher.publish(configuration, result);
+        }
+    }
 
+    private static void publishReport(final Configuration configuration, final ReportDetails reportDetails) {
+        final List<OperationResultPublisher> publishers = configuration.getPluginRegister().getPlugins(
+            OperationResultPublisher.class);
 
+        for (final OperationResultPublisher publisher : publishers) {
+            publisher.publishReport(configuration, reportDetails);
+        }
+    }
 
+    private static MigrationFilterImpl getInfoFilter(final CommandLineArguments commandLineArguments) {
+        return new MigrationFilterImpl(commandLineArguments.getInfoSinceDate(),
+            commandLineArguments.getInfoUntilDate(),
+            commandLineArguments.getInfoSinceVersion(),
+            commandLineArguments.getInfoUntilVersion(),
+            commandLineArguments.getInfoOfState());
+    }
 
-
-
-
-
-
-
-
-    private static void printJson(CommandLineArguments commandLineArguments, OperationResult object, ReportDetails reportDetails) {
-        String json = convertObjectToJsonString(object, reportDetails);
+    private static void printJson(final CommandLineArguments commandLineArguments,
+        final OperationResult object,
+        final ReportDetails reportDetails) throws JsonProcessingException {
+        final String json = convertObjectToJsonString(object, reportDetails);
 
         if (commandLineArguments.isOutputFileSet()) {
-            Path path = Paths.get(commandLineArguments.getOutputFile());
-            byte[] bytes = json.getBytes();
+            final Path path = Paths.get(commandLineArguments.getOutputFile());
+            final byte[] bytes = json.getBytes();
 
             try {
-                Files.write(path, bytes, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
-            } catch (IOException e) {
+                Files.write(path,
+                    bytes,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.CREATE);
+            } catch (final IOException e) {
                 throw new FlywayException("Could not write to output file " + commandLineArguments.getOutputFile(), e);
             }
         }
@@ -316,28 +399,25 @@ public class Main {
         System.out.println(json);
     }
 
-    private static String convertObjectToJsonString(Object object, ReportDetails reportDetails) {
-        Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
-                .disableHtmlEscaping()
-                .serializeNulls()
-                .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeSerializer())
-                .create();
-        JsonElement jsonElements = gson.toJsonTree(object);
+    private static String convertObjectToJsonString(final Object object, final ReportDetails reportDetails)
+        throws JsonProcessingException {
+        final JsonMapper mapper = JsonUtils.getJsonMapper();
+        final ObjectNode objectNode = mapper.valueToTree(object);
+
         if (reportDetails != null) {
             if (reportDetails.getJsonReportFilename() != null) {
-                jsonElements.getAsJsonObject().addProperty("jsonReport", reportDetails.getJsonReportFilename());
+                objectNode.put("jsonReport", reportDetails.getJsonReportFilename());
             }
-
             if (reportDetails.getHtmlReportFilename() != null) {
-                jsonElements.getAsJsonObject().addProperty("htmlReport", reportDetails.getHtmlReportFilename());
+                objectNode.put("htmlReport", reportDetails.getHtmlReportFilename());
             }
         }
-        return gson.toJson(jsonElements);
+
+        return mapper.writeValueAsString(objectNode);
     }
 
-    private static void printUsage(Boolean fullVersion) {
-        String indent = "    ";
+    private static void printUsage(final Boolean fullVersion) {
+        final String indent = "    ";
 
         LOG.info("Usage");
         LOG.info(indent + "flyway [options] [command]");
@@ -351,16 +431,29 @@ public class Main {
         }
 
         LOG.info("Commands");
-        List<Pair<String, String>> usages = pluginRegister.getPlugins(CommandExtension.class).stream().flatMap(e -> e.getUsage().stream()).collect(Collectors.toList());
-        int padSize = usages.stream().max(Comparator.comparingInt(u -> u.getLeft().length())).map(u -> u.getLeft().length() + 3).orElse(11);
+        final List<Pair<String, String>> usages = PLUGIN_REGISTER.getPlugins(CommandExtension.class)
+            .stream()
+            .flatMap(e -> e.getUsage().stream())
+            .toList();
+        final int padSize = usages.stream().max(Comparator.comparingInt(u -> u.getLeft().length())).map(u -> u.getLeft()
+            .length() + 3).orElse(11);
         LOG.info(indent + StringUtils.rightPad("help", padSize, ' ') + "Print this usage info and exit");
+
+
+
         LOG.info(indent + StringUtils.rightPad("migrate", padSize, ' ') + "Migrates the database");
         LOG.info(indent + StringUtils.rightPad("clean", padSize, ' ') + "Drops all objects in the configured schemas");
         LOG.info(indent + StringUtils.rightPad("info", padSize, ' ') + "Prints the information about applied, current and pending migrations");
         LOG.info(indent + StringUtils.rightPad("validate", padSize, ' ') + "Validates the applied migrations against the ones on the classpath");
         LOG.info(indent + StringUtils.rightPad("baseline", padSize, ' ') + "Baselines an existing database at the baselineVersion");
         LOG.info(indent + StringUtils.rightPad("repair", padSize, ' ') + "Repairs the schema history table");
-        usages.forEach(u -> LOG.info(indent + StringUtils.rightPad(u.getLeft(), padSize, ' ') + u.getRight()));
+        for (final Pair<String, String> usage : usages) {
+            final List<String> lines = Arrays.stream(usage.getRight().split("\n")).map(String::trim).toList();
+            LOG.info(indent + StringUtils.rightPad(usage.getLeft(), padSize, ' ') + lines.get(0));
+            for (int i = 1; i < lines.size(); i++) {
+                LOG.info(indent + " ".repeat(padSize) + lines.get(i));
+            }
+        }
         LOG.info("");
         LOG.info("Configuration parameters (Format: -key=value)");
         LOG.info(indent + "driver                         Fully qualified classname of the JDBC driver");
@@ -399,7 +492,7 @@ public class Main {
             LOG.info(indent + "installedBy                    Username that will be recorded in the schema history table");
             LOG.info(indent + "target                         Target version up to which Flyway should use migrations");
             LOG.info(indent + "cherryPick                     [" + "teams] Comma separated list of migrations that Flyway should consider when migrating");
-            LOG.info(indent + "skipExecutingMigrations        [" + "teams] Whether Flyway should skip actually executing the contents of the migrations");
+            LOG.info(indent + "skipExecutingMigrations        Whether Flyway should skip actually executing the contents of the migrations");
             LOG.info(indent + "outOfOrder                     Allows migrations to be run \"out of order\"");
             LOG.info(indent + "callbacks                      Comma-separated list of FlywayCallback classes, or locations to scan for FlywayCallback classes");
             LOG.info(indent + "skipDefaultCallbacks           Skips default callbacks (sql)");
@@ -431,12 +524,6 @@ public class Main {
         LOG.info(indent + "-q                Suppress all output, except for errors and warnings");
         LOG.info(indent + "-n                Suppress prompting for a user and password");
         LOG.info(indent + "--help, -h, -?    Print this usage info and exit");
-
-        if (fullVersion) {
-            LOG.info(indent + "-community        [deprecated] Run the Flyway Community Edition (default)");
-            LOG.info(indent + "-teams            [deprecated] Run the Flyway Teams Edition");
-        }
-
         LOG.info("");
         LOG.info("Flyway Usage Example");
         LOG.info(indent + "flyway -user=myuser -password=s3cr3t -url=jdbc:h2:mem -placeholders.abc=def migrate");
@@ -446,22 +533,18 @@ public class Main {
         LOG.info("Learn more about Flyway Teams edition at " + FlywayDbWebsiteLinks.TRY_TEAMS_EDITION);
     }
 
-    private static boolean printHelp(CommandLineArguments commandLineArguments) {
-
-        StringBuilder helpText = new StringBuilder();
-
-        CommandLineArguments.PrintUsage result = commandLineArguments.shouldPrintUsage(helpText);
+    private static boolean printHelp(final CommandLineArguments commandLineArguments) {
+        final StringBuilder helpText = new StringBuilder();
+        final CommandLineArguments.PrintUsage result = commandLineArguments.shouldPrintUsage(helpText);
 
         if (result == CommandLineArguments.PrintUsage.PRINT_NONE) {
             return false;
         } else {
-
             if (StringUtils.hasText(helpText.toString())) {
                 LOG.info(helpText.toString());
             } else {
                 printUsage(result == CommandLineArguments.PrintUsage.PRINT_ORIGINAL);
             }
-
             return true;
         }
     }

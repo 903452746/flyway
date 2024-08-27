@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.database;
 
@@ -40,13 +44,12 @@ public class InsertRowLock {
      */
     private final String tableLockString = getNextRandomString();
     private final JdbcTemplate jdbcTemplate;
-    private final int lockTimeoutMins;
+    public static final int LOCK_TIMEOUT_MINS = 10;
     private final ScheduledExecutorService executor;
     private ScheduledFuture<?> scheduledFuture;
 
-    public InsertRowLock(JdbcTemplate jdbcTemplate, int lockTimeoutMins) {
+    public InsertRowLock(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.lockTimeoutMins = lockTimeoutMins;
         this.executor = createScheduledExecutor();
     }
 
@@ -74,7 +77,7 @@ public class InsertRowLock {
     }
 
     private String generateDeleteExpiredLockStatement(String deleteExpiredLockStatementTemplate) {
-        LocalDateTime zonedDateTime = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(lockTimeoutMins);
+        LocalDateTime zonedDateTime = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(LOCK_TIMEOUT_MINS);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         return String.format(deleteExpiredLockStatementTemplate.replace("?", "%s"), zonedDateTime.format(formatter));
     }
@@ -122,7 +125,7 @@ public class InsertRowLock {
             LOG.debug("Updating lock in Flyway schema history table");
             jdbcTemplate.executeStatement(updateLockStatement);
         };
-        return executor.scheduleAtFixedRate(lockUpdatingTask, 0, lockTimeoutMins / 2, TimeUnit.MINUTES);
+        return executor.scheduleAtFixedRate(lockUpdatingTask, 0, LOCK_TIMEOUT_MINS / 2, TimeUnit.MINUTES);
     }
 
     private void stopLockWatchingThread() {

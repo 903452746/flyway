@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.info;
 
@@ -23,11 +27,14 @@ import org.flywaydb.core.api.output.OperationResult;
 import org.flywaydb.core.api.output.ValidateOutput;
 import org.flywaydb.core.api.pattern.ValidatePattern;
 import org.flywaydb.core.api.resolver.ResolvedMigration;
-
+import org.flywaydb.core.api.MigrationFilter;
 import org.flywaydb.core.extensibility.AppliedMigration;
+import org.flywaydb.core.extensibility.LicenseGuard;
 import org.flywaydb.core.extensibility.MigrationType;
+import org.flywaydb.core.extensibility.Tier;
 import org.flywaydb.core.internal.database.base.Database;
 import org.flywaydb.core.internal.database.base.Schema;
+import org.flywaydb.core.internal.license.FlywayEditionUpgradeRequiredException;
 import org.flywaydb.core.internal.resolver.CompositeMigrationResolver;
 import org.flywaydb.core.internal.schemahistory.SchemaHistory;
 import org.flywaydb.core.internal.util.Pair;
@@ -239,6 +246,9 @@ public class MigrationInfoServiceImpl implements MigrationInfoService, Operation
 
 
 
+
+
+
     private void validateTarget(MigrationVersion target, List<MigrationInfoImpl> migrationInfos) {
         boolean targetFound = false;
         for (MigrationInfoImpl migration : migrationInfos) {
@@ -353,7 +363,7 @@ public class MigrationInfoServiceImpl implements MigrationInfoService, Operation
             if (!av.getLeft().getType().isSynthetic() && version.equals(av.getLeft().getVersion())) {
                 if (av.getRight().deleted) {
                     throw new FlywayException("Corrupted schema history: multiple delete entries for version " + version,
-                                              ErrorCode.DUPLICATE_DELETED_MIGRATION);
+                                              CoreErrorCode.DUPLICATE_DELETED_MIGRATION);
                 } else {
                     av.getRight().deleted = true;
                     return;
@@ -367,17 +377,15 @@ public class MigrationInfoServiceImpl implements MigrationInfoService, Operation
         return migrationInfos.toArray(new MigrationInfo[0]);
     }
 
+    public MigrationInfo[] all(MigrationFilter filter) {
+        if (filter == null) {
+            return migrationInfos.toArray(new MigrationInfo[0]);
+        }
 
-
-
-
-
-
-
-
-
-
-
+        return migrationInfos.stream()
+                .filter(m -> filter.matches(m) || m.getState() == MigrationState.AVAILABLE)
+                .toArray(MigrationInfo[]::new);
+    }
 
     @Override
     public MigrationInfo current() {
@@ -529,10 +537,8 @@ public class MigrationInfoServiceImpl implements MigrationInfoService, Operation
         return CommandResultFactory.createInfoResult(this.configuration, this.database, infos, this.current(), this.allSchemasEmpty);
     }
 
-
-
-
-
-
-
+    @Override
+    public InfoResult getInfoResult(MigrationFilter filter) {
+        return getInfoResult(this.all(filter));
+    }
 }

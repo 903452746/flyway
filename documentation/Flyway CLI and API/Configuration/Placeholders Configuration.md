@@ -8,7 +8,7 @@ redirect_from: /documentation/placeholders/
 Flyway comes with support for placeholder replacement in:
 
 - [SQL migrations](Configuration/Placeholders Configuration#sql-migration-placeholders)
-- [Script migrations](Configuration/Placeholders Configuration#script-migration-placeholders) {% include teams.html %}
+- [Script migrations](Configuration/Placeholders Configuration#script-migration-placeholders)
 
 # SQL Migration Placeholders
 In addition to regular SQL syntax, Flyway also supports placeholder replacement with configurable prefixes and suffixes.
@@ -26,7 +26,7 @@ Placeholders are supported in versioned migrations, repeatable migrations, and S
 Placeholders can be configured through a number of different ways.
 - Via environment variables. `FLYWAY_PLACEHOLDERS_MYPLACEHOLDER=value`
 - Via configuration parameters. `flyway.placeholders.myplaceholder=value`
-- Via the api. `.placeholders(Map.of("myplaceholder", "value"))`
+- Via the API. `.placeholders(Map.of("myplaceholder", "value"))`
 
 Placeholders are case insensitive, so a placeholder like `${myplaceholder}` can be specified with any of the above techniques.
 
@@ -40,8 +40,9 @@ Flyway also provides default placeholders, whose values are automatically popula
 - `${flyway:database}` = The name of the database from the connection url
 - `${flyway:timestamp}` = The time that Flyway parsed the script, formatted as 'yyyy-MM-dd HH:mm:ss'
 - `${flyway:filename}` = The filename of the current script
-- `${flyway:workingDirectory}` = The user working directory as defined by the ['user.dir']((https://docs.oracle.com/javase/tutorial/essential/environment/sysprop.html)) System Property
+- `${flyway:workingDirectory}` = The user working directory as defined by the ['user.dir'](https://docs.oracle.com/javase/tutorial/essential/environment/sysprop.html) System Property
 - `${flyway:table}` = The name of the Flyway schema history table
+- `${flyway:environment}` = The name of the [environment](configuration/parameters/flyway/environment) configured for this script execution
 
 ### Example
 Here is a small example of the supported syntax:
@@ -66,7 +67,6 @@ INSERT INTO ${tableName} (name) VALUES ('Mr. T');
 ```
 
 # Script Migration Placeholders
-{% include teams.html %}
 
 Much like SQL placeholders, Flyway supports placeholder replacement in
 [script migrations](Concepts/migrations#script-migrations). Placeholders can be read

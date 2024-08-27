@@ -1,25 +1,29 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.util;
 
+import java.lang.reflect.InvocationTargetException;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.flywaydb.core.api.FlywayException;
 
-import java.beans.Expression;
 import java.io.File;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -58,47 +62,6 @@ public class ClassUtils {
         } catch (Exception e) {
             throw new FlywayException("Unable to instantiate class " + className + " : " + e.getMessage(), e);
         }
-    }
-
-    @SuppressWarnings({"unchecked"})
-    public static <T> T instantiate(String className, ClassLoader classLoader, Object... params) {
-        try {
-            return (T) new Expression(Class.forName(className, false, classLoader), "new", params).getValue();
-        } catch (Exception e) {
-            throw new FlywayException("Unable to instantiate class " + className + " : " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Creates a new instance of this class.
-     *
-     * @param clazz The class to instantiate.
-     * @return The new instance.
-     * @throws FlywayException Thrown when the instantiation failed.
-     */
-    public static <T> T instantiate(Class<T> clazz) {
-        try {
-            return clazz.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            throw new FlywayException("Unable to instantiate class " + clazz.getName() + " : " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Instantiate all these classes.
-     *
-     * @param classes Fully qualified class names to instantiate.
-     * @param classLoader The ClassLoader to use.
-     * @return The list of instances.
-     */
-    public static <T> List<T> instantiateAll(String[] classes, ClassLoader classLoader) {
-        List<T> clazzes = new ArrayList<>();
-        for (String clazz : classes) {
-            if (StringUtils.hasLength(clazz)) {
-                clazzes.add(ClassUtils.instantiate(clazz, classLoader));
-            }
-        }
-        return clazzes;
     }
 
     /**
@@ -243,14 +206,65 @@ public class ClassUtils {
         }
     }
 
-    public static Map<String, String> getGettableFieldValues(Object obj, String prefix) {
+    public static Object getFieldValue(Object obj, String fieldName) {
+        try {
+            Field field = obj.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(obj);
+        } catch (Exception e) {
+            throw new FlywayException("Unable to obtain field value " + obj.getClass().getName() + "." + fieldName + " : " + e.getMessage(), e);
+        }
+    }
+
+    public static void setFieldValue(Object obj, String fieldName, Object value) {
+        try {
+            Field field = obj.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(obj, value);
+        } catch (Exception e) {
+            throw new FlywayException("Unable to set field value " + obj.getClass().getName() + "." + fieldName + " : " + e.getMessage(), e);
+        }
+    }
+
+    public static List<String> getGettableField(final Object obj) {
+        return getGettableField(obj, "");
+    }
+
+    public static List<String> getGettableField(final Object obj, final String prefix) {
+        List<String> fields = new ArrayList<>();
+
+        Class<?> clazz = obj.getClass();
+        while (clazz != null) {
+            for (Method method : Arrays.stream(clazz.getDeclaredMethods()).filter(m -> m.getName().startsWith("get")
+                && Arrays.stream(m.getAnnotations()).noneMatch(a -> a instanceof DoNotMapForLogging)
+                && !m.getName().equals("getClass")).toList()) {
+                    method.setAccessible(true);
+                    String name = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
+                    fields.add(prefix + name);
+            }
+
+            clazz = clazz.getSuperclass();
+        }
+        return fields;
+    }
+
+    public static Map<String, String> getGettableFieldValues(final Object obj, final String prefix) {
         Map<String, String> fieldValues = new TreeMap<>();
-        for (Method method : Arrays.stream(obj.getClass().getDeclaredMethods()).filter(m -> m.getName().startsWith("get") && Arrays.stream(m.getAnnotations()).noneMatch(a -> a instanceof DoNotMapForLogging)).collect(Collectors.toList())) {
-            try {
-                method.setAccessible(true);
-                String name = method.getName().substring(3,4).toLowerCase() + method.getName().substring(4);
-                fieldValues.put(prefix + name, method.invoke(obj).toString());
-            } catch (Exception ignored) {}
+
+        Class<?> clazz = obj.getClass();
+        while (clazz != null) {
+            for (Method method : Arrays.stream(clazz.getDeclaredMethods()).filter(m -> m.getName().startsWith("get")
+                && Arrays.stream(m.getAnnotations()).noneMatch(a -> a instanceof DoNotMapForLogging)
+                && !m.getName().equals("getClass")).toList()) {
+                try {
+                    method.setAccessible(true);
+                    String name = method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4);
+                    fieldValues.put(prefix + name, method.invoke(obj).toString());
+                } catch (Exception ignored) {
+                }
+            }
+
+            clazz = clazz.getSuperclass();
         }
         return fieldValues;
     }

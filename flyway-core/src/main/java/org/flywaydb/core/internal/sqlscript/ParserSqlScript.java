@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.sqlscript;
 
@@ -46,9 +50,7 @@ public class ParserSqlScript implements SqlScript {
     private final boolean mixed;
     private boolean parsed;
 
-
-
-
+    private final boolean stream;
     private final Set<SqlScript> referencedSqlScripts = new TreeSet<>();
 
     /**
@@ -60,11 +62,9 @@ public class ParserSqlScript implements SqlScript {
      */
     public ParserSqlScript(Parser parser, LoadableResource resource, LoadableResource metadataResource, boolean mixed) {
         this.resource = resource;
-        this.metadata = SqlScriptMetadata.fromResource(metadataResource, parser);
+        this.metadata = SqlScriptMetadata.fromResource(metadataResource, parser, parser.configuration);
         this.parser = parser;
-
-
-
+        this.stream = resource.shouldStream();
         this.mixed = mixed;
     }
 
@@ -73,13 +73,9 @@ public class ParserSqlScript implements SqlScript {
             boolean transactionalStatementFound = false;
             SqlStatement sqlStatement;
             while ((sqlStatement = sqlStatementIterator.next()) != null) {
-
-
-
+                if (!stream) {
                     this.sqlStatements.add(sqlStatement);
-
-
-
+                }
 
                 sqlStatementCount++;
 
@@ -125,11 +121,9 @@ public class ParserSqlScript implements SqlScript {
     public SqlStatementIterator getSqlStatements() {
         validate();
 
-
-
-
-
-
+        if (stream) {
+            return parser.parse(resource, metadata);
+        }
 
         final Iterator<SqlStatement> iterator = sqlStatements.iterator();
         return new SqlStatementIterator() {
@@ -192,6 +186,22 @@ public class ParserSqlScript implements SqlScript {
     @Override
     public boolean shouldExecute() {
         return metadata.shouldExecute();
+    }
+
+    @Override
+    public String shouldExecuteExpression() {
+        return metadata.shouldExecuteExpression();
+    }
+
+    @Override
+    public boolean placeholderReplacement() {
+        Boolean placeholderReplacementOverride = metadata.placeholderReplacement();
+        if (placeholderReplacementOverride != null) {
+            LOG.debug("Using placeholderReplacement=" + placeholderReplacementOverride + " from script configuration");
+            return placeholderReplacementOverride;
+        }
+
+        return parser.configuration.isPlaceholderReplacement();
     }
 
     @Override

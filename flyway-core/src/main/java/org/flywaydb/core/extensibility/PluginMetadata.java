@@ -1,25 +1,29 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.extensibility;
 
-import org.flywaydb.core.internal.util.Pair;
-import org.flywaydb.core.internal.util.StringUtils;
-
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.flywaydb.core.internal.util.Pair;
+import org.flywaydb.core.internal.util.StringUtils;
 
 public interface PluginMetadata extends Plugin {
     /**
@@ -36,7 +40,11 @@ public interface PluginMetadata extends Plugin {
         String documentationLink = getDocumentationLink();
 
         if (description != null) {
-            result.append("Description:\n").append(indent).append(description).append("\n\n");
+            result.append("Description:\n");
+            Arrays.stream(description.split("\n")).map(String::trim).forEach(line -> result.append(indent)
+                .append(line)
+                .append("\n"));
+            result.append("\n");
         }
 
         int padSize = 0;
@@ -50,7 +58,10 @@ public interface PluginMetadata extends Plugin {
         if (configurationParameters != null) {
             result.append("Configuration parameters: (Format: -key=value)\n");
             for (ConfigurationParameter p : configurationParameters) {
-                result.append(indent).append(StringUtils.rightPad(p.name.substring("flyway.".length()), padSize, ' ')).append(p.description);
+                final String parameterName = p.name.startsWith("flyway.")
+                    ? p.name.substring("flyway.".length())
+                    : p.name;
+                result.append(indent).append(StringUtils.rightPad(parameterName, padSize, ' ')).append(p.description);
                 if (p.required) {
                     result.append(" [REQUIRED]");
                 }

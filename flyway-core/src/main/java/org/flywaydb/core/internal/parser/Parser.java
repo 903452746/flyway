@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.parser;
 
@@ -38,12 +42,10 @@ import java.util.regex.Pattern;
  */
 @CustomLog
 public abstract class Parser {
-
-
-
-
-
-
+    /**
+     * Regex to determine whether this statement can be run as part of batch or whether it must be run individually.
+     */
+    private static final Pattern BATCHABLE_REGEX = Pattern.compile("^(INSERT|UPDATE|DELETE|UPSERT|MERGE)");
 
     public final Configuration configuration;
     private final int peekDepth;
@@ -139,7 +141,7 @@ public abstract class Parser {
      * @return The new reader with placeholder replacement.
      */
     protected Reader replacePlaceholders(Reader reader, SqlScriptMetadata metadata) {
-        if (configuration.isPlaceholderReplacement() && (metadata == null || metadata.placeholderReplacement())) {
+        if ((metadata == null || metadata.placeholderReplacement() == null) ? configuration.isPlaceholderReplacement() : metadata.placeholderReplacement()) {
             return PlaceholderReplacingReader.create(configuration, parsingContext, reader);
         }
         return reader;
@@ -165,9 +167,7 @@ public abstract class Parser {
 
             StatementType statementType = StatementType.UNKNOWN;
             Boolean canExecuteInTransaction = null;
-
-
-
+            Boolean batchable = null;
 
             String simplifiedStatement = "";
 
@@ -232,11 +232,9 @@ public abstract class Parser {
                     if (canExecuteInTransaction == null) {
                         canExecuteInTransaction = determineCanExecuteInTransaction(simplifiedStatement, keywords, true);
                     }
-
-
-
-
-
+                    if (batchable == null) {
+                        batchable = false;
+                    }
                     if (TokenType.EOF == tokenType && (parensDepth > 0 || blockDepth > 0)) {
                         throw new FlywayException("Incomplete statement at line " + statementLine +
                                                           " col " + statementCol + ": " + sql);
@@ -247,6 +245,7 @@ public abstract class Parser {
 
 
 
+                            , batchable
                                           );
                 }
 
@@ -293,17 +292,15 @@ public abstract class Parser {
                     if (canExecuteInTransaction == null) {
                         canExecuteInTransaction = determineCanExecuteInTransaction(simplifiedStatement, keywords, null);
                     }
-
-
-
-
-
+                    if (batchable == null) {
+                        batchable = BATCHABLE_REGEX.matcher(simplifiedStatement).matches();
+                    }
                 }
             } while (true);
         } catch (Exception e) {
             IOUtils.close(reader);
             throw new FlywayException("Unable to parse statement in " + resource.getAbsolutePath()
-                                              + " at line " + statementLine + " col " + statementCol + ". See " + FlywayDbWebsiteLinks.KNOWN_PARSER_LIMITATIONS + " for more information: " + e.getMessage(), e);
+                                              + " at line " + statementLine + " col " + statementCol + ". See " + FlywayDbWebsiteLinks.KNOWN_PARSER_LIMITATIONS + " for more information. " + getAdditionalParsingErrorInfo() + e.getMessage(), e);
         }
     }
 
@@ -438,13 +435,10 @@ public abstract class Parser {
 
 
 
+            , boolean batchable
                                                 ) throws IOException {
         return new ParsedSqlStatement(statementPos, statementLine, statementCol,
-                                      sql, delimiter, canExecuteInTransaction
-
-
-
-        );
+                                      sql, delimiter, canExecuteInTransaction, batchable);
     }
 
     protected StatementType detectStatementType(String simplifiedStatement, ParserContext context, PeekingReader reader) {
@@ -605,7 +599,7 @@ public abstract class Parser {
             }
         }
         if (validKeywords != null) {
-            return validKeywords.contains(text);
+            return validKeywords.contains(text.toUpperCase(Locale.ENGLISH));
         }
         return true;
     }
@@ -682,6 +676,10 @@ public abstract class Parser {
 
     protected Token handleKeyword(PeekingReader reader, ParserContext context, int pos, int line, int col, String keyword) throws IOException {
         return new Token(TokenType.KEYWORD, pos, line, col, keyword.toUpperCase(Locale.ENGLISH), keyword, context.getParensDepth());
+    }
+
+    protected String getAdditionalParsingErrorInfo() {
+        return "";
     }
 
     private static boolean containsAtLeast(String str, char c, int min) {

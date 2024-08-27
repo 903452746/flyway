@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.database.base;
 
@@ -20,6 +24,8 @@ import lombok.Getter;
 import org.flywaydb.core.api.CoreMigrationType;
 import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.extensibility.LicenseGuard;
+import org.flywaydb.core.extensibility.Tier;
 import org.flywaydb.core.internal.database.DatabaseType;
 import org.flywaydb.core.internal.exception.FlywayDbUpgradeRequiredException;
 import org.flywaydb.core.internal.exception.FlywaySqlException;
@@ -27,18 +33,27 @@ import org.flywaydb.core.internal.jdbc.JdbcConnectionFactory;
 import org.flywaydb.core.internal.jdbc.JdbcTemplate;
 import org.flywaydb.core.internal.jdbc.JdbcUtils;
 import org.flywaydb.core.internal.jdbc.StatementInterceptor;
-import org.flywaydb.core.internal.license.Edition;
-import org.flywaydb.core.internal.license.FlywayEditionUpgradeRequiredException;
 import org.flywaydb.core.internal.resource.StringResource;
 import org.flywaydb.core.internal.sqlscript.Delimiter;
 import org.flywaydb.core.internal.sqlscript.SqlScript;
 import org.flywaydb.core.internal.sqlscript.SqlScriptFactory;
 import org.flywaydb.core.internal.util.AbbreviationUtils;
+import org.flywaydb.core.internal.util.Pair;
 import org.flywaydb.core.internal.util.StringUtils;
 
 import java.io.Closeable;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.util.List;
+
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_AWS_VM;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_AZURE_URL_IDENTIFIER;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_AZURE_VM;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_GCP_URL_IDENTIFIER;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_GCP_VM;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_LOCAL;
+import static org.flywaydb.core.internal.database.base.DatabaseConstants.DATABASE_HOSTING_RDS_URL_IDENTIFIER;
+import static org.flywaydb.core.internal.util.FlywayDbWebsiteLinks.COMMUNITY_SUPPORT;
 
 /**
  * Abstraction for database-specific functionality.
@@ -97,7 +112,7 @@ public abstract class Database<C extends Connection> implements Closeable {
     /**
      * Ensure Flyway supports this version of this database.
      */
-    public abstract void ensureSupported();
+    public abstract void ensureSupported(Configuration configuration);
 
     /**
      * @return The 'major.minor' version of this database.
@@ -123,13 +138,12 @@ public abstract class Database<C extends Connection> implements Closeable {
      * Flyway.
      */
     protected final void ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition(String oldestSupportedVersionInThisEdition,
-                                                                                            Edition editionWhereStillSupported) {
-        if (!getVersion().isAtLeast(oldestSupportedVersionInThisEdition)) {
-            throw new FlywayEditionUpgradeRequiredException(
-                    editionWhereStillSupported,
-                    databaseType,
-                    computeVersionDisplayName(getVersion()));
+                                                                                            List<Tier> editionWhereStillSupported, Configuration configuration) {
+        if (!LicenseGuard.isLicensed(configuration, editionWhereStillSupported) &&
+                !getVersion().isAtLeast(oldestSupportedVersionInThisEdition)) {
+            LOG.info(getDatabaseType().getName() + " " + computeVersionDisplayName(getVersion()) + " is outside of Redgate community support. See " + COMMUNITY_SUPPORT + " for details");
         }
+
     }
 
     protected final void recommendFlywayUpgradeIfNecessary(String newestSupportedVersion) {
@@ -362,7 +376,16 @@ public abstract class Database<C extends Connection> implements Closeable {
                 + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     }
 
-    public final String getBaselineStatement(Table table) {
+    public String getUpdateStatement(Table table) {
+        return "UPDATE " + table
+                + " SET "
+                + quote("description") + "=? , "
+                + quote("type") + "=? , "
+                + quote("checksum") + "=?"
+                + " WHERE " + quote("installed_rank") + "=?";
+    }
+
+    protected String getBaselineStatement(Table table) {
         return String.format(getInsertStatement(table).replace("?", "%s"),
                              1,
                              "'" + configuration.getBaselineVersion() + "'",
@@ -390,6 +413,16 @@ public abstract class Database<C extends Connection> implements Closeable {
                 + " FROM " + table
                 + " WHERE " + quote("installed_rank") + " > ?"
                 + " ORDER BY " + quote("installed_rank");
+    }
+
+    public Pair<String, Object> getDeleteStatement(Table table, boolean version, String filter) {
+        String deleteStatement = "DELETE FROM " + table +
+            " WHERE " + quote("success") + " = " + getBooleanFalse() + " AND " +
+            (version ?
+                quote("version") + " = ?" :
+                quote("description") + " = ?");
+
+        return Pair.of(deleteStatement, filter);
     }
 
     public final String getInstalledBy() {
@@ -467,5 +500,19 @@ public abstract class Database<C extends Connection> implements Closeable {
 
     public Schema[] getAllSchemas() {
         throw new UnsupportedOperationException("Getting all schemas not supported for " + getDatabaseType().getName());
+    }
+
+    public String getDatabaseHosting() {
+        String url = configuration.getUrl();
+
+        if (DATABASE_HOSTING_AZURE_URL_IDENTIFIER.matcher(url).find()) {
+            return DATABASE_HOSTING_AZURE_VM;
+        } else if (DATABASE_HOSTING_RDS_URL_IDENTIFIER.matcher(url).find()) {
+            return DATABASE_HOSTING_AWS_VM;
+        } else if (url.contains(DATABASE_HOSTING_GCP_URL_IDENTIFIER)) {
+            return DATABASE_HOSTING_GCP_VM;
+        }
+
+        return DATABASE_HOSTING_LOCAL;
     }
 }

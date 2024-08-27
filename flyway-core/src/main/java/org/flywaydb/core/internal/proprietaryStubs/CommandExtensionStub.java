@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.proprietaryStubs;
 
@@ -23,6 +27,7 @@ import org.flywaydb.core.api.configuration.Configuration;
 import org.flywaydb.core.api.output.OperationResult;
 import org.flywaydb.core.extensibility.CommandExtension;
 import org.flywaydb.core.extensibility.EventTelemetryModel;
+import org.flywaydb.core.internal.license.FlywayRedgateEditionRequiredException;
 import org.flywaydb.core.internal.util.FlywayDbWebsiteLinks;
 
 import java.util.Arrays;
@@ -46,9 +51,9 @@ public class CommandExtensionStub implements CommandExtension {
     @Override
     public OperationResult handle(String command, Configuration config, List<String> flags, FlywayTelemetryManager flywayTelemetryManager) throws FlywayException {
         try (EventTelemetryModel telemetryModel = new EventTelemetryModel(command, flywayTelemetryManager)) {
-            FlywayProprietaryRequiredException flywayProprietaryRequiredException = new FlywayProprietaryRequiredException(command, FlywayDbWebsiteLinks.UPGRADE_TO_REDGATE_FLYWAY);
-            telemetryModel.setException(flywayProprietaryRequiredException);
-            throw  flywayProprietaryRequiredException;
+            FlywayRedgateEditionRequiredException flywayRedgateEditionRequiredException = new FlywayRedgateEditionRequiredException(command);
+            telemetryModel.setException(flywayRedgateEditionRequiredException);
+            throw flywayRedgateEditionRequiredException;
         }
     }
 
@@ -59,6 +64,6 @@ public class CommandExtensionStub implements CommandExtension {
 
     @Override
     public int getPriority() {
-        return Integer.MIN_VALUE;
+        return -100;
     }
 }

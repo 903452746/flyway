@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-gradle-plugin
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.gradle.task;
 
@@ -41,6 +45,7 @@ import java.net.URLClassLoader;
 import java.util.*;
 
 import static org.flywaydb.core.internal.configuration.ConfigUtils.FLYWAY_PLUGINS_PREFIX;
+import static org.flywaydb.core.internal.configuration.ConfigUtils.makeRelativeLocationsBasedOnWorkingDirectory;
 import static org.flywaydb.core.internal.configuration.ConfigUtils.putIfSet;
 
 /**
@@ -379,10 +384,9 @@ public abstract class AbstractFlywayTask extends DefaultTask {
     /**
      * Ignore migrations that match this comma-separated list of patterns when validating migrations.
      * Each pattern is of the form <migration_type>:<migration_state>
-     * See https://documentation.red-gate.com/fd/ignore-migration-patterns-184127507.html for full details
+     * See https://documentation.red-gate.com/flyway/flyway-cli-and-api/configuration/parameters/flyway/ignore-migration-patterns for full details
      * Example: repeatable:missing,versioned:pending,*:failed
      * (default: *:future)
-     * <i>Flyway Teams only</i>
      */
     public String[] ignoreMigrationPatterns;
 
@@ -535,15 +539,6 @@ public abstract class AbstractFlywayTask extends DefaultTask {
     public String kerberosConfigFile;
 
     /**
-     * Your Flyway license key (FL01...). Not yet a Flyway Teams Edition customer?
-     * Request your <a href="https://flywaydb.org/download/">Flyway trial license key</a>
-     * to try out Flyway Teams Edition features free for 30 days.
-     * <i>Flyway Teams only</i>
-     * <p>Also configurable with Gradle or System Property: ${flyway.licenseKey}</p>
-     */
-    public String licenseKey;
-
-    /**
      * The maximum number of retries when trying to obtain a lock. (default: 50)
      */
     public Integer lockRetryCount;
@@ -605,7 +600,7 @@ public abstract class AbstractFlywayTask extends DefaultTask {
                     getProject().getBuildscript().getClassLoader());
 
             Map<String, String> config = createFlywayConfig(envVars);
-            ConfigUtils.dumpConfigurationMap(config);
+            ConfigUtils.dumpConfigurationMap(config, "Using configuration:");
 
             Flyway flyway = Flyway.configure(classLoader).configuration(config).load();
             Object result = run(flyway);
@@ -726,7 +721,6 @@ public abstract class AbstractFlywayTask extends DefaultTask {
         putIfSet(conf, ConfigUtils.SCRIPT_PLACEHOLDER_PREFIX, scriptPlaceholderPrefix, extension.scriptPlaceholderPrefix);
         putIfSet(conf, ConfigUtils.SCRIPT_PLACEHOLDER_SUFFIX, scriptPlaceholderSuffix, extension.scriptPlaceholderSuffix);
         putIfSet(conf, ConfigUtils.TARGET, target, extension.target);
-        putIfSet(conf, ConfigUtils.CHERRY_PICK, StringUtils.arrayToCommaDelimitedString(cherryPick), StringUtils.arrayToCommaDelimitedString(extension.cherryPick));
         putIfSet(conf, ConfigUtils.LOGGERS, StringUtils.arrayToCommaDelimitedString(loggers), StringUtils.arrayToCommaDelimitedString(extension.loggers));
         putIfSet(conf, ConfigUtils.OUT_OF_ORDER, outOfOrder, extension.outOfOrder);
         putIfSet(conf, ConfigUtils.SKIP_EXECUTING_MIGRATIONS, skipExecutingMigrations, extension.skipExecutingMigrations);
@@ -753,8 +747,6 @@ public abstract class AbstractFlywayTask extends DefaultTask {
         putIfSet(conf, ConfigUtils.BATCH, batch, extension.batch);
 
         putIfSet(conf, ConfigUtils.KERBEROS_CONFIG_FILE, kerberosConfigFile, extension.kerberosConfigFile);
-
-        putIfSet(conf, ConfigUtils.LICENSE_KEY, licenseKey, extension.licenseKey);
 
         if (extension.placeholders != null) {
             for (Map.Entry<Object, Object> entry : extension.placeholders.entrySet()) {
@@ -819,16 +811,7 @@ public abstract class AbstractFlywayTask extends DefaultTask {
         String[] locationsToAdd = getLocations();
 
         if (locationsToAdd != null) {
-            for (int i = 0; i < locationsToAdd.length; i++) {
-                if (locationsToAdd[i].startsWith(Location.FILESYSTEM_PREFIX)) {
-                    String newLocation = locationsToAdd[i].substring(Location.FILESYSTEM_PREFIX.length());
-                    File file = new File(newLocation);
-                    if (!file.isAbsolute()) {
-                        file = new File(workingDirectory, newLocation);
-                    }
-                    locationsToAdd[i] = Location.FILESYSTEM_PREFIX + file.getAbsolutePath();
-                }
-            }
+            ConfigUtils.makeRelativeLocationsBasedOnWorkingDirectory(workingDirectory.getAbsolutePath(), locationsToAdd);
         }
 
         putIfSet(conf, ConfigUtils.LOCATIONS, StringUtils.arrayToCommaDelimitedString(locationsToAdd));

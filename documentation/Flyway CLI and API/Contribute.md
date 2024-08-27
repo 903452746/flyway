@@ -20,16 +20,6 @@ subtitle: Contribute
                 class="fa fa-arrow-right"></i></a>
     </p>
 
-    <h2 class="padded-top--tight">Improve the website</h2>
-
-    <p>Have you found something that isn't quite as clear as it should be? Or is it simply wrong? No problem!</p>
-
-    <p>The website is backed by Git, Jekyll and GitHub pages. Pull requests welcome!</p>
-    <p>
-        <a href="Contribute/Documentation" style="text-decoration: none; background: rgb(204,0,0); padding: 6px 40px; border-radius: 10px; color: white; font-weight: bold;">Make this website rock <i
-                class="fa fa-arrow-right"></i></a>
-    </p>
-
     <h2 class="padded-top--tight">Bug reports</h2>
 
     <p>Have you found a bug? Please let us know in the <a href="https://github.com/flyway/flyway/issues">Issue
@@ -86,7 +76,7 @@ subtitle: Contribute
     <h2 class="padded-top--tight">Contribute database support</h2>
     <p>Discovered that Flyway doesn't support your favorite database platform? Why not contribute the support yourself.</p>
     <p>
-        <a href="Contribute/Contributing Database Compatibility to Flyway" style="text-decoration: none; background: rgb(204,0,0); padding: 6px 40px; border-radius: 10px; color: white; font-weight: bold;">Contributing database support <i
+        <a href="Contribute/flyway community database support" style="text-decoration: none; background: rgb(204,0,0); padding: 6px 40px; border-radius: 10px; color: white; font-weight: bold;">Contributing database support <i
             class="fa fa-arrow-right"></i></a>
     </p>
 

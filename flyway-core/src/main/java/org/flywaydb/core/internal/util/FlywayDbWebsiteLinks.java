@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.util;
 
@@ -30,6 +34,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class FlywayDbWebsiteLinks {
     public static final String TRY_TEAMS_EDITION = "https://rd.gt/2VzHpkY";
+    public static final String REDGATE_EDITION_DOWNLOAD = "https://rd.gt/3GGIXhh";
     public static final String FILTER_INFO_OUTPUT = "https://rd.gt/3jqLqAn";
     public static final String USAGE_COMMANDLINE = "https://rd.gt/3Cc1xKC";
     public static final String STAYING_UP_TO_DATE = "https://rd.gt/3rXiSlV";
@@ -42,7 +47,6 @@ public class FlywayDbWebsiteLinks {
     public static final String AZURE_ACTIVE_DIRECTORY = "https://rd.gt/3unaRb8";
     public static final String TRIAL_UPGRADE = "https://rd.gt/2WNixqj";
     public static final String KNOWN_PARSER_LIMITATIONS = "https://rd.gt/3ipi7Pm";
-    public static final String CLOUD_SPANNER_BETA = "https://rd.gt/3yqM3jJ";
     public static final String TEAMS_FEATURES_FOR_BIG_QUERY = "https://rd.gt/3CWAuTb";
     public static final String TEAMS_FEATURES_FOR_CLOUD_SPANNER = "https://rd.gt/2ZvELhV";
     public static final String FILE_ENCODING_HELP = "https://rd.gt/3BzSFhr";
@@ -57,4 +61,13 @@ public class FlywayDbWebsiteLinks {
     public static final String MIGRATION_REPORT_LEARN_MORE = "https://rd.gt/3okl9tM";
     public static final String GIVE_FEEDBACK = "https://rd.gt/41oQMAG";
     public static final String TOML_HELP = "https://rd.gt/45ynYIt";
+    public static final String EULA_LINK = "https://www.red-gate.com/eula";
+    public static final String COMMUNITY_SUPPORT = "https://rd.gt/468B6ni";
+
+    public static final String ENTERPRISE_INFO = "https://www.red-gate.com/products/flyway/enterprise/";
+    public static final String RELEASE_NOTES = "https://rd.gt/416ObMi";
+
+    public static final String COMMUNITY_CONTRIBUTED_DATABASES = "https://rd.gt/3SXtLDt";
+
+    public static final String ORACLE_DATABASE = "https://rd.gt/3SISqKJ";
 }

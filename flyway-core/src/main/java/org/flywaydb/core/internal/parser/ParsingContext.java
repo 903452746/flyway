@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.parser;
 
@@ -20,6 +24,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.experimental.ExperimentalDatabase;
 import org.flywaydb.core.internal.database.base.Database;
 import org.flywaydb.core.internal.database.base.Schema;
 import org.flywaydb.core.internal.resource.ResourceName;
@@ -38,6 +43,7 @@ public class ParsingContext {
     private static final String FILENAME_PLACEHOLDER = "filename";
     private static final String WORKING_DIRECTORY_PLACEHOLDER = "workingDirectory";
     private static final String TABLE_PLACEHOLDER = "table";
+    private static final String ENVIRONMENT_PLACEHOLDER = "environment";
 
     @Getter
     private final Map<String, String> placeholders = new HashMap<>();
@@ -47,6 +53,25 @@ public class ParsingContext {
 
     private String generateName(String name, Configuration configuration) {
         return "flyway" + configuration.getPlaceholderSeparator() + name;
+    }
+    
+    public void populate(final ExperimentalDatabase database, final Configuration configuration) {
+        String defaultSchemaName = configuration.getDefaultSchema();
+        final String[] schemaNames = configuration.getSchemas();
+        if (defaultSchemaName == null) {
+            if (schemaNames.length > 0) {
+                defaultSchemaName = schemaNames[0];
+            } 
+        }
+
+        if (defaultSchemaName != null) {
+            placeholders.put(generateName(DEFAULT_SCHEMA_PLACEHOLDER,configuration), defaultSchemaName);
+        }
+
+        placeholders.put(generateName(TIMESTAMP_PLACEHOLDER,configuration), new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+        placeholders.put(generateName(WORKING_DIRECTORY_PLACEHOLDER,configuration), System.getProperty("user.dir"));
+        placeholders.put(generateName(TABLE_PLACEHOLDER,configuration), configuration.getTable());
+        placeholders.put(generateName(ENVIRONMENT_PLACEHOLDER, configuration), configuration.getCurrentEnvironmentName());
     }
 
     public void populate(Database database, Configuration configuration) {
@@ -78,8 +103,9 @@ public class ParsingContext {
 
         placeholders.put(generateName(USER_PLACEHOLDER,configuration), currentUser);
         placeholders.put(generateName(TIMESTAMP_PLACEHOLDER,configuration), new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-        placeholders.put(generateName(WORKING_DIRECTORY_PLACEHOLDER,configuration), System.getProperty("user.dir"));
+        placeholders.put(generateName(WORKING_DIRECTORY_PLACEHOLDER,configuration), configuration.getWorkingDirectory() != null ? configuration.getWorkingDirectory() :  System.getProperty("user.dir"));
         placeholders.put(generateName(TABLE_PLACEHOLDER,configuration), configuration.getTable());
+        placeholders.put(generateName(ENVIRONMENT_PLACEHOLDER, configuration), configuration.getCurrentEnvironmentName());
     }
 
     public void updateFilenamePlaceholder(ResourceName resourceName, Configuration configuration) {

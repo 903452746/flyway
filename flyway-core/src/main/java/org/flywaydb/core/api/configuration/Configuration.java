@@ -1,26 +1,34 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.api.configuration;
 
+import org.flywaydb.core.ProgressLogger;
 import org.flywaydb.core.api.*;
 import org.flywaydb.core.api.callback.Callback;
 import org.flywaydb.core.api.migration.JavaMigration;
 import org.flywaydb.core.api.pattern.ValidatePattern;
 import org.flywaydb.core.api.resolver.MigrationResolver;
 import org.flywaydb.core.internal.configuration.models.ConfigurationModel;
+import org.flywaydb.core.internal.configuration.models.DataSourceModel;
+import org.flywaydb.core.internal.configuration.models.ResolvedEnvironment;
+import org.flywaydb.core.internal.configuration.resolvers.ProvisionerMode;
 import org.flywaydb.core.internal.database.DatabaseType;
 import org.flywaydb.core.internal.plugin.PluginRegister;
 
@@ -163,17 +171,6 @@ public interface Configuration {
      * @return The file name prefix for sql migrations. (default: V)
      */
     String getSqlMigrationPrefix();
-
-    /**
-     * The file name prefix for undo SQL migrations.
-     * Undo SQL migrations are responsible for undoing the effects of the versioned migration with the same version.
-     * They have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix,
-     * which using the defaults translates to U1.1__My_description.sql
-     * <i>Flyway Teams only</i>
-     *
-     * @return The file name prefix for undo sql migrations. (default: U)
-     */
-    String getUndoSqlMigrationPrefix();
 
     /**
      * Checks whether SQL is executed in a transaction.
@@ -415,10 +412,9 @@ public interface Configuration {
     /**
      * Ignore migrations that match this comma-separated list of patterns when validating migrations.
      * Each pattern is of the form <migration_type>:<migration_state>
-     * See https://documentation.red-gate.com/fd/ignore-migration-patterns-184127507.html for full details
+     * See https://documentation.red-gate.com/flyway/flyway-cli-and-api/configuration/parameters/flyway/ignore-migration-patterns for full details
      * Example: repeatable:missing,versioned:pending,*:failed
      * (default: *:future)
-     * <i>Flyway Teams only</i>
      */
     ValidatePattern[] getIgnoreMigrationPatterns();
 
@@ -456,6 +452,15 @@ public interface Configuration {
      * @return {@code true} to disable clean. {@code false} to be able to clean. (default: {@code true})
      */
     boolean isCleanDisabled();
+
+
+    /**
+     * Whether to disable community database support.
+     * This is especially useful for production environments where using community databases is undesirable.
+     *
+     * @return {@code true} to disable community database support. {@code false} to be able to use community database support. (default: {@code false})
+     */
+    boolean isCommunityDBSupportEnabled();
 
     /**
      * Whether to allow mixing transactional and non-transactional statements within the same migration. Enabling this
@@ -553,17 +558,6 @@ public interface Configuration {
     String getKerberosConfigFile();
 
     /**
-     * Your Flyway license key (FL01...). Not yet a Flyway Teams Edition customer?
-     * Request your <a href="https://flywaydb.org/download">Flyway trial license key</a>
-     * to try out Flyway Teams Edition features free for 30 days.
-     *
-     * <i>Flyway Teams only</i>
-     *
-     * @return Your Flyway license key.
-     */
-    String getLicenseKey();
-
-    /**
      * Whether Flyway should output a table with the results of queries when executing migrations.
      *
      * <i>Flyway Teams only</i>
@@ -636,6 +630,26 @@ public interface Configuration {
 
     /**
      * Get the Database type determined by the URL or Datasource
+     * If there are multiple matching DatabaseTypes for the URL, the first candidate will be returned.
      */
     DatabaseType getDatabaseType();
+
+    /**
+     *  Gets the connection environments that have already been resolved from this configuration
+     */
+    Map<String, ResolvedEnvironment> getCachedResolvedEnvironments();
+
+    /**
+     *  Gets DataSources for all the environments
+     */
+    Map<String, DataSourceModel> getCachedDataSources();
+
+    /**
+     *  Get the name of the current environment
+     */
+    String getCurrentEnvironmentName();
+
+    ProgressLogger createProgress(String operationName);
+
+    ResolvedEnvironment getResolvedEnvironment(String envName, ProvisionerMode provisionerMode, ProgressLogger progress);
 }

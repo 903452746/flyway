@@ -1,29 +1,33 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.api.output;
 
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
+import lombok.experimental.Tolerate;
 
 @NoArgsConstructor
 public class HtmlResult implements OperationResult {
-    @Getter
+
     @Setter
     private String timestamp;
     @Getter
@@ -36,12 +40,13 @@ public class HtmlResult implements OperationResult {
     @Setter
     private boolean licenseFailed;
 
-    protected HtmlResult(LocalDateTime timestamp, String operation) {
+    public HtmlResult(final LocalDateTime timestamp, final String operation) {
         setTimestamp(timestamp);
         this.operation = operation;
     }
 
-    public void setTimestamp(LocalDateTime timestamp) {
+    @Tolerate
+    public void setTimestamp(final LocalDateTime timestamp) {
         this.timestamp = timestamp.toString();
     }
 
@@ -49,7 +54,7 @@ public class HtmlResult implements OperationResult {
         return LocalDateTime.parse(timestamp);
     }
 
-    public void setException(Exception exception) {
+    public void setException(final Exception exception) {
         if (exception != null) {
             this.exceptionObject = exception;
             this.exception = exception.getMessage();

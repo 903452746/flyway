@@ -1,23 +1,28 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.scanner.filesystem;
 
 import lombok.CustomLog;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.Location;
+import org.flywaydb.core.api.configuration.Configuration;
 import org.flywaydb.core.api.resource.LoadableResource;
 import org.flywaydb.core.internal.resource.filesystem.FileSystemResource;
 import org.flywaydb.core.internal.sqlscript.SqlScriptMetadata;
@@ -34,15 +39,15 @@ public class FileSystemScanner {
     private final Charset defaultEncoding;
     private final boolean detectEncoding;
     private final boolean throwOnMissingLocations;
-    private boolean stream = false;
+    private final boolean stream;
+    private Configuration config;
 
-    public FileSystemScanner(Charset encoding, boolean stream, boolean detectEncoding, boolean throwOnMissingLocations) {
-        this.defaultEncoding = encoding;
-        this.detectEncoding = detectEncoding;
-
-
-
-        this.throwOnMissingLocations = throwOnMissingLocations;
+    public FileSystemScanner(boolean stream, Configuration config) {
+        this.defaultEncoding = config.getEncoding();
+        this.detectEncoding = config.isDetectEncoding();
+        this.stream = stream;
+        this.throwOnMissingLocations = config.isFailOnMissingLocations();
+        this.config = config;
     }
 
     /**
@@ -78,7 +83,7 @@ public class FileSystemScanner {
                 String encodingBlurb = "";
                 if (new File(resourceName + ".conf").exists()) {
                     LoadableResource metadataResource = new FileSystemResource(location, resourceName + ".conf", defaultEncoding, false);
-                    SqlScriptMetadata metadata = SqlScriptMetadata.fromResource(metadataResource, null);
+                    SqlScriptMetadata metadata = SqlScriptMetadata.fromResource(metadataResource, null, config);
                     if (metadata.encoding() != null) {
                         encoding = Charset.forName(metadata.encoding());
                         detectEncodingForThisResource = false;
@@ -140,18 +145,5 @@ public class FileSystemScanner {
         }
 
         return resourceNames;
-    }
-
-    private enum DirectoryValidationResult {
-        NOT_FOUND,
-        NOT_READABLE,
-        NOT_A_DIRECTORY,
-        UNABLE_TO_ACCESS_FOLDER,
-        VALID;
-
-        @Override
-        public String toString() {
-            return name().toLowerCase().replace('_', ' ');
-        }
     }
 }

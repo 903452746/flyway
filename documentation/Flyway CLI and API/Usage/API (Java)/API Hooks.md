@@ -8,7 +8,7 @@ There are three ways you can hook into the Flyway API.
 
 ## Java-based Migrations
 
-The first one is the the most common one: [Java-based Migrations](Concepts/migrations#java-based-migrations)
+The first one is the most common one: [Java-based Migrations](Concepts/migrations#java-based-migrations)
 when you need more power than SQL can offer you. This is great to for dealing with LOBs or performing advanced
 data transformations.
 
@@ -137,6 +137,9 @@ public class MyNotifierCallback implements Callback {
 
 In order to be picked up by Flyway, Java-based Callbacks must implement the Callback interface. 
 Flyway will automatically scan for and load all callbacks found in the `db/callback` package. Additional callback classes or scan locations can be specified by the `flyway.callbacks` configuration property.
+
+Furthermore, a new Exception type, `FlywayBlockStatementExecutionException`, has been introduced to facilitate the uninterrupted progression of the entire migration process. 
+To ensure that an error in your Java callback does not halt the migration, you can raise a `FlywayBlockStatementExecutionException` within your java callback when dealing with `BEFORE_EACH_MIGRATE_STATEMENT`. This approach allows the migration process to persist rather than terminating upon encountering an error. 
 
 ## Custom Migration resolvers &amp; executors
 

@@ -1,22 +1,28 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-core
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.core.internal.command;
 
 import lombok.CustomLog;
 import lombok.Getter;
+import org.flywaydb.core.ProgressLogger;
+import org.flywaydb.core.api.CoreErrorCode;
 import org.flywaydb.core.api.ErrorCode;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.MigrationInfo;
@@ -65,6 +71,7 @@ public class DbMigrate {
      */
     private boolean isPreviousVersioned;
     private final List<ResolvedMigration> appliedResolvedMigrations = new ArrayList<>();
+    private final ProgressLogger progress;
 
     public DbMigrate(Database database,
                      SchemaHistory schemaHistory, Schema schema, CompositeMigrationResolver migrationResolver,
@@ -76,6 +83,7 @@ public class DbMigrate {
         this.migrationResolver = migrationResolver;
         this.configuration = configuration;
         this.callbackExecutor = callbackExecutor;
+        this.progress = configuration.createProgress("migrate");
     }
 
     /**
@@ -84,7 +92,9 @@ public class DbMigrate {
     public MigrateResult migrate() throws FlywayException {
         callbackExecutor.onMigrateOrUndoEvent(Event.BEFORE_MIGRATE);
 
-        migrateResult = CommandResultFactory.createMigrateResult(database.getCatalog(), configuration);
+        migrateResult = CommandResultFactory.createMigrateResult(database.getCatalog(),
+                                                                 database.getDatabaseType().getName(),
+                                                                 configuration);
 
         int count;
         try {
@@ -139,7 +149,6 @@ public class DbMigrate {
                     : schemaHistory.lock(() -> migrateGroup(firstRun));
 
             migrateResult.migrationsExecuted += count;
-
             total += count;
             if (count == 0) {
                 // No further migrations available
@@ -219,6 +228,8 @@ public class DbMigrate {
             }
         }
 
+        Arrays.stream(infoService.pending()).forEach(migrateResult::putPendingMigration);
+
         LinkedHashMap<MigrationInfoImpl, Boolean> group = new LinkedHashMap<>();
         for (MigrationInfoImpl pendingMigration : infoService.pending()) {
             if (appliedResolvedMigrations.contains(pendingMigration.getResolvedMigration())) {
@@ -254,7 +265,7 @@ public class DbMigrate {
 
         String targetText = (targetVersion != null) ? ", now at version v" + targetVersion : "";
 
-        String migrationText = (migrationSuccessCount == 1) ? "migration" : "migrations";
+        String migrationText = "migration" + StringUtils.pluralizeSuffix(migrationSuccessCount);
 
         LOG.info("Successfully applied " + migrationSuccessCount + " " + migrationText + " to schema " + schema
                          + targetText + " (execution time " + TimeFormat.format(executionTime) + ")");
@@ -277,15 +288,17 @@ public class DbMigrate {
             }
         } catch (FlywayMigrateException e) {
             MigrationInfo migration = e.getMigration();
-
             String failedMsg = "Migration of " + toMigrationText(migration, e.isExecutableInTransaction(), e.isOutOfOrder()) + " failed!";
+            stopWatch.stop();
+            int executionTime = (int) stopWatch.getTotalTimeMillis();
+
+            migrateResult.putFailedMigration(migration, executionTime);
+
             if (database.supportsDdlTransactions() && executeGroupInTransaction) {
                 LOG.error(failedMsg + " Changes successfully rolled back.");
+                migrateResult.markAsRolledBack(group.keySet().stream().toList());
             } else {
                 LOG.error(failedMsg + " Please restore backups and roll back database and code!");
-
-                stopWatch.stop();
-                int executionTime = (int) stopWatch.getTotalTimeMillis();
                 schemaHistory.addAppliedMigration(migration.getVersion(), migration.getDescription(),
                                                   migration.getType(), migration.getScript(), migration.getChecksum(), executionTime, false);
             }
@@ -337,6 +350,7 @@ public class DbMigrate {
             }
         };
 
+        progress.pushSteps(group.size());
         for (Map.Entry<MigrationInfoImpl, Boolean> entry : group.entrySet()) {
             final MigrationInfoImpl migration = entry.getKey();
             boolean isOutOfOrder = entry.getValue();
@@ -353,8 +367,10 @@ public class DbMigrate {
 
             if (skipExecutingMigrations) {
                 LOG.debug("Skipping execution of migration of " + migrationText);
+                progress.log("Skipping migration of " + migration.getScript());
             } else {
                 LOG.debug("Starting migration of " + migrationText + " ...");
+                progress.log("Starting migration of " + migration.getScript() + " ...");
 
                 connectionUserObjects.restoreOriginalState();
                 connectionUserObjects.changeCurrentSchemaTo(schema);
@@ -364,6 +380,7 @@ public class DbMigrate {
                     callbackExecutor.onEachMigrateOrUndoEvent(Event.BEFORE_EACH_MIGRATE);
                     try {
                         LOG.info("Migrating " + migrationText);
+                        progress.log("Migrating " + migration.getScript());
 
                         // With single connection databases we need to manually disable the transaction for the
                         // migration as it is turned on for schema history changes
@@ -386,6 +403,7 @@ public class DbMigrate {
                     }
 
                     LOG.debug("Successfully completed migration of " + migrationText);
+                    progress.log("Successfully completed migration of " + migration.getScript());
                     callbackExecutor.onEachMigrateOrUndoEvent(Event.AFTER_EACH_MIGRATE);
                 } finally {
                     callbackExecutor.setMigrationInfo(null);
@@ -395,7 +413,8 @@ public class DbMigrate {
             stopWatch.stop();
             int executionTime = (int) stopWatch.getTotalTimeMillis();
 
-            migrateResult.migrations.add(CommandResultFactory.createMigrateOutput(migration, executionTime));
+            migrateResult.migrations.add(CommandResultFactory.createMigrateOutput(migration, executionTime, null));
+            migrateResult.putSuccessfulMigration(migration, executionTime);
 
             schemaHistory.addAppliedMigration(migration.getVersion(), migration.getDescription(), migration.getType(),
                                               migration.getScript(), migration.getResolvedMigration().getChecksum(), executionTime, true);
@@ -429,9 +448,9 @@ public class DbMigrate {
 
         public ErrorCode getMigrationErrorCode() {
             if (migration.getVersion() != null) {
-                return ErrorCode.FAILED_VERSIONED_MIGRATION;
+                return CoreErrorCode.FAILED_VERSIONED_MIGRATION;
             } else {
-                return ErrorCode.FAILED_REPEATABLE_MIGRATION;
+                return CoreErrorCode.FAILED_REPEATABLE_MIGRATION;
             }
         }
 

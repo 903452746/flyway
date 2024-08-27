@@ -10,21 +10,10 @@ You can find more detail of these rules in the [SQLFluff rules](https://docs.sql
 # Enterprise Rules
 {% include enterprise.html %}
 
-Redgate has added a set of additonal rules that are of interest to customers with a larger and more complex database infrastructure.
+Redgate has added a set of additional rules that are of interest to customers with a larger and more complex database infrastructure.
 
-Enterprise customers are also able to define their own rules - see [Creating Regular Expression Rules](Learn More/Creating Regular Expression Rules) 
-## Flyway_L001
-_CREATE TABLE statement without a PRIMARY KEY constraint_
+Enterprise customers are also able to define their own rules - see [Creating Regular Expression Rules](Configuration/Creating Regular Expression Rules) 
 
-**Dialects:** All
-
-It is best practice in most situations to define a primary key for each table. This can facilitate querying and ordering data 
-## Flyway_L002
-_A table has been created but has no MS_Description property added_
-
-**Dialects:** TSQL
-
-Intrinsic documentation helps other database developers and can be used to generate documentation about the database.
 ## RX001
 _DROP TABLE statement_
 
@@ -98,5 +87,13 @@ This is used to modify user accounts so should be investigated before continuing
 _DROP PARTITION statement used_
 
 **Dialects:** All
+## RX013
+_CREATE TABLE statement without a PRIMARY KEY constraint_
+
+**Dialects:** All
+## RX014
+_A table has been created but has no MS_Description property added_
+
+**Dialects:** TSQL
 
 This operation is likely to result in a loss of data so should be investigated before continuing

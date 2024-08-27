@@ -1,17 +1,21 @@
-/*
- * Copyright (C) Red Gate Software Ltd 2010-2023
- *
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-maven-plugin
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * =========================LICENSE_END==================================
  */
 package org.flywaydb.maven;
 
@@ -379,10 +383,9 @@ abstract class AbstractFlywayMojo extends AbstractMojo {
     /**
      * Ignore migrations that match this comma-separated list of patterns when validating migrations.
      * Each pattern is of the form <migration_type>:<migration_state>
-     * See https://documentation.red-gate.com/fd/ignore-migration-patterns-184127507.html for full details
+     * See https://documentation.red-gate.com/flyway/flyway-cli-and-api/configuration/parameters/flyway/ignore-migration-patterns for full details
      * Example: repeatable:missing,versioned:pending,*:failed
      * (default: *:future)
-     * <i>Flyway Teams only</i>
      */
     @Parameter
     private String[] ignoreMigrationPatterns;
@@ -595,17 +598,6 @@ abstract class AbstractFlywayMojo extends AbstractMojo {
     private String kerberosConfigFile;
 
     /**
-     * Your Flyway license key (FL01...). Not yet a Flyway Teams Edition customer?
-     * Request your <a href="https://flywaydb.org/download">Flyway trial license key</a>
-     * to try out Flyway Teams Edition features free for 30 days.
-     *
-     * <i>Flyway Teams only</i>
-     * <p>Also configurable with Maven or System Property: ${flyway.licenseKey}</p>
-     */
-    @Parameter(property = ConfigUtils.LICENSE_KEY)
-    private String licenseKey;
-
-    /**
      * The encoding of the external config files specified with the {@code flyway.configFiles} property. (default: UTF-8).
      * <p>Also configurable with Maven or System Property: ${flyway.configFileEncoding}</p>
      */
@@ -792,7 +784,6 @@ abstract class AbstractFlywayMojo extends AbstractMojo {
             putIfSet(conf, ConfigUtils.SKIP_EXECUTING_MIGRATIONS, skipExecutingMigrations);
             putIfSet(conf, ConfigUtils.OUTPUT_QUERY_RESULTS, outputQueryResults);
             putIfSet(conf, ConfigUtils.TARGET, target);
-            putArrayIfSet(conf, ConfigUtils.CHERRY_PICK, cherryPick);
             putArrayIfSet(conf, ConfigUtils.LOGGERS, loggers);
             putArrayIfSet(conf, ConfigUtils.IGNORE_MIGRATION_PATTERNS, ignoreMigrationPatterns);
             putIfSet(conf, ConfigUtils.VALIDATE_MIGRATION_NAMING, validateMigrationNaming);
@@ -814,8 +805,6 @@ abstract class AbstractFlywayMojo extends AbstractMojo {
             putIfSet(conf, ConfigUtils.BATCH, batch);
 
             putIfSet(conf, ConfigUtils.KERBEROS_CONFIG_FILE, kerberosConfigFile);
-
-            putIfSet(conf, ConfigUtils.LICENSE_KEY, licenseKey);
 
             if (placeholders != null) {
                 for (String placeholder : placeholders.keySet()) {
