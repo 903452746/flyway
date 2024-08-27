@@ -1,3 +1,22 @@
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-database-dm
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * =========================LICENSE_END==================================
+ */
 /*
  * Copyright (C) Red Gate Software Ltd 2010-2023
  *
@@ -16,6 +35,7 @@
 package com.github.mengweijin.flyway.database.dm;
 
 import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.extensibility.Tier;
 import org.flywaydb.core.internal.database.base.Database;
 import org.flywaydb.core.internal.database.base.Table;
 import org.flywaydb.core.internal.jdbc.JdbcConnectionFactory;
@@ -58,13 +78,12 @@ public class DmDatabase extends Database<DmConnection> {
         return new DmConnection(this, connection);
     }
 
-
     @Override
-    public final void ensureSupported() {
+    public void ensureSupported(Configuration configuration) {
         //最小支持版本7
         ensureDatabaseIsRecentEnough("7.0");
         //最新支持版本8.1
-        ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("8.1", org.flywaydb.core.internal.license.Edition.ENTERPRISE);
+        ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("8.1", Tier.PREMIUM, configuration);
         recommendFlywayUpgradeIfNecessary("8.1");
     }
 

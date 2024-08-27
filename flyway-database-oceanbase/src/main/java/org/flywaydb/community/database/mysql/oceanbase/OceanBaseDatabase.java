@@ -1,3 +1,22 @@
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-database-oceanbase
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * =========================LICENSE_END==================================
+ */
 /*
  * Copyright (C) Red Gate Software Ltd 2010-2023
  *
@@ -16,20 +35,17 @@
 package org.flywaydb.community.database.mysql.oceanbase;
 
 import lombok.CustomLog;
-import org.flywaydb.community.database.mysql.oceanbase.OceanBaseConnection;
 import org.flywaydb.core.api.CoreMigrationType;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.extensibility.Tier;
 import org.flywaydb.core.internal.database.base.BaseDatabaseType;
 import org.flywaydb.core.internal.database.base.Database;
 import org.flywaydb.core.internal.database.base.Table;
-import org.flywaydb.core.internal.exception.FlywaySqlException;
 import org.flywaydb.core.internal.jdbc.JdbcConnectionFactory;
 import org.flywaydb.core.internal.jdbc.JdbcTemplate;
 import org.flywaydb.core.internal.jdbc.StatementInterceptor;
-import org.flywaydb.database.mysql.MySQLDatabaseType;
-import org.flywaydb.database.mysql.mariadb.MariaDBDatabaseType;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -107,11 +123,11 @@ public class OceanBaseDatabase extends Database<OceanBaseConnection> {
     }
 
     boolean isMySQL() {
-        return databaseType instanceof MySQLDatabaseType;
+        return false;
     }
 
     boolean isMariaDB() {
-        return databaseType instanceof MariaDBDatabaseType;
+        return false;
     }
 
     boolean isPxcStrict() {
@@ -132,7 +148,6 @@ public class OceanBaseDatabase extends Database<OceanBaseConnection> {
     @Override
     public String getRawCreateScript(Table table, boolean baseline) {
         String tablespace =
-
 
 
                 configuration.getTablespace() == null
@@ -188,13 +203,27 @@ public class OceanBaseDatabase extends Database<OceanBaseConnection> {
     }
 
     @Override
+    public void ensureSupported(Configuration configuration) {
+        if ("TiDB".equals(databaseType.getName())) {
+            ensureDatabaseIsRecentEnough("5.0");
+            recommendFlywayUpgradeIfNecessary("5.0");
+            return;
+        }
+        if ("OceanBase".equals(databaseType.getName())) {
+            ensureDatabaseIsRecentEnough("2.2");
+            recommendFlywayUpgradeIfNecessary("3.2");
+            return;
+        }
+        ensureDatabaseIsRecentEnough("5.1");
+        ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("8.0", Tier.PREMIUM, configuration);
+        recommendFlywayUpgradeIfNecessary("8.0");
+    }
+
+    @Override
     protected MigrationVersion determineVersion() {
         // Ignore the version from the JDBC metadata and use the version returned by the database since proxies such as
         // Azure or ProxySQL return incorrect versions
         String selectVersionOutput = BaseDatabaseType.getSelectVersionOutput(rawMainJdbcConnection);
-        if (databaseType instanceof MariaDBDatabaseType) {
-            return extractMariaDBVersionFromString(selectVersionOutput);
-        }
         return extractMySQLVersionFromString(selectVersionOutput);
     }
 
@@ -219,66 +248,6 @@ public class OceanBaseDatabase extends Database<OceanBaseConnection> {
         throw new FlywayException("Unable to determine version from '" + versionString + "'");
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    @Override
-    public final void ensureSupported() {
-        if ("TiDB".equals(databaseType.getName())) {
-            ensureDatabaseIsRecentEnough("5.0");
-            recommendFlywayUpgradeIfNecessary("5.0");
-            return;
-        }
-        if ("OceanBase".equals(databaseType.getName())) {
-            ensureDatabaseIsRecentEnough("2.2");
-            recommendFlywayUpgradeIfNecessary("3.2");
-            return;
-        }
-        ensureDatabaseIsRecentEnough("5.1");
-        if (databaseType instanceof MariaDBDatabaseType) {
-
-            ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("10.3", org.flywaydb.core.internal.license.Edition.ENTERPRISE);
-
-            recommendFlywayUpgradeIfNecessary("10.6");
-        } else {
-
-            ensureDatabaseNotOlderThanOtherwiseRecommendUpgradeToFlywayEdition("8.0", org.flywaydb.core.internal.license.Edition.ENTERPRISE);
-
-
-
-
-
-
-
-
-
-
-
-
-            recommendFlywayUpgradeIfNecessary("8.0");
-        }
-    }
 
     @Override
     protected String doGetCurrentUser() throws SQLException {

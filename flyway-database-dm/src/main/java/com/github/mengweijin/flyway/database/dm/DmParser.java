@@ -1,3 +1,22 @@
+/*-
+ * ========================LICENSE_START=================================
+ * flyway-database-dm
+ * ========================================================================
+ * Copyright (C) 2010 - 2024 Red Gate Software Ltd
+ * ========================================================================
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * =========================LICENSE_END==================================
+ */
 /*
  * Copyright (C) Red Gate Software Ltd 2010-2023
  *
@@ -63,7 +82,8 @@ public class DmParser extends Parser {
         super(configuration, parsingContext, 3);
     }
 
-    protected ParsedSqlStatement createStatement(PeekingReader reader, Recorder recorder, int statementPos, int statementLine, int statementCol, int nonCommentPartPos, int nonCommentPartLine, int nonCommentPartCol, StatementType statementType, boolean canExecuteInTransaction, Delimiter delimiter, String sql) throws IOException {
+    @Override
+    protected ParsedSqlStatement createStatement(PeekingReader reader, Recorder recorder, int statementPos, int statementLine, int statementCol, int nonCommentPartPos, int nonCommentPartLine, int nonCommentPartCol, StatementType statementType, boolean canExecuteInTransaction, Delimiter delimiter, String sql,boolean batchable) throws IOException {
         if (PLSQL_VIEW_STATEMENT == statementType) {
             sql = sql.trim();
             if (sql.endsWith(";")) {
@@ -71,7 +91,7 @@ public class DmParser extends Parser {
             }
         }
 
-        return super.createStatement(reader, recorder, statementPos, statementLine, statementCol, nonCommentPartPos, nonCommentPartLine, nonCommentPartCol, statementType, canExecuteInTransaction, delimiter, sql);
+        return super.createStatement(reader,recorder,statementPos,statementLine,statementCol,nonCommentPartPos,nonCommentPartLine,nonCommentPartCol,statementType,canExecuteInTransaction,delimiter,sql,batchable);
     }
 
     protected StatementType detectStatementType(String simplifiedStatement, ParserContext context, PeekingReader reader) {
