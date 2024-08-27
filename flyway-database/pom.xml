@@ -21,7 +21,7 @@
         <module>flyway-database-informix</module>
         <module>flyway-database-postgresql</module>
         <module>flyway-database-oracle</module>
-        <module>flyway-database-mongodb</module>
+<!--        <module>flyway-database-mongodb</module>-->
         <module>flyway-database-redshift</module>
         <module>flyway-database-saphana</module>
         <module>flyway-database-snowflake</module>
